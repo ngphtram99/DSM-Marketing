@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tra cứu Giá trị Cấp mẫu DSM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12161b;
+    --panel:#1a2027;
+    --panel-2:#1f262e;
+    --border:#2a323c;
+    --text:#e9edf1;
+    --text-dim:#8b98a5;
+    --text-faint:#5a6673;
+    --men:#c9863f;
+    --men-soft:rgba(201,134,63,.14);
+    --da:#5c93ab;
+    --da-soft:rgba(92,147,171,.14);
+    --good:#5fb488;
+    --warn:#d9634a;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(92,147,171,.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, rgba(201,134,63,.06), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    min-height:100vh;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  a{color:inherit;}
+
+  /* ---------- shell ---------- */
+  .shell{max-width:1240px;margin:0 auto;padding:28px 20px 60px;}
+  header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;}
+  .brand h1{font-size:22px;font-weight:800;margin:0 0 4px;letter-spacing:-.01em;}
+  .brand p{margin:0;color:var(--text-dim);font-size:13.5px;}
+  .brand .tile{display:inline-flex;align-items:center;gap:8px;}
+  .swatch{width:9px;height:9px;border-radius:2px;display:inline-block;}
+  .status{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-faint);}
+  .status .dot{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px rgba(95,180,136,.18);}
+  .status.err .dot{background:var(--warn);box-shadow:0 0 0 3px rgba(217,99,74,.18);}
+  button.refresh{
+    background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    padding:6px 12px;border-radius:8px;font-size:12.5px;cursor:pointer;display:flex;gap:6px;align-items:center;
+    font-family:inherit;transition:border-color .15s;
+  }
+  button.refresh:hover{border-color:#3a4552;}
+  button.refresh svg{width:13px;height:13px;}
+  .spin{animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---------- search bar ---------- */
+  .searchbar{
+    display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;
+  }
+  .searchbox{
+    flex:1 1 320px;position:relative;
+  }
+  .searchbox input{
+    width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);
+    padding:13px 16px 13px 42px;border-radius:11px;font-size:14.5px;font-family:inherit;outline:none;
+    transition:border-color .15s;
+  }
+  .searchbox input:focus{border-color:#465361;}
+  .searchbox svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text-faint);}
+  .region-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;}
+  .chip{
+    white-space:nowrap;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);
+    padding:10px 14px;border-radius:10px;font-size:13px;cursor:pointer;transition:.15s;font-family:inherit;
+  }
+  .chip:hover{border-color:#3a4552;color:var(--text);}
+  .chip.active{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:600;}
+
+  /* ---------- layout ---------- */
+  .layout{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:start;}
+  @media (max-width:860px){.layout{grid-template-columns:1fr;}}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .panel-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .panel-head h3{margin:0;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);font-weight:600;}
+  .count-pill{font-size:11.5px;color:var(--text-faint);background:var(--panel-2);padding:2px 8px;border-radius:20px;}
+
+  /* customer list */
+  .cust-list{max-height:70vh;overflow-y:auto;}
+  .cust-item{
+    padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s;
+    display:flex;flex-direction:column;gap:3px;
+  }
+  .cust-item:last-child{border-bottom:none;}
+  .cust-item:hover{background:var(--panel-2);}
+  .cust-item.active{background:linear-gradient(90deg, rgba(92,147,171,.14), transparent);border-left:2px solid var(--da);padding-left:14px;}
+  .cust-item .name{font-size:14px;font-weight:600;}
+  .cust-item .meta{font-size:12px;color:var(--text-faint);display:flex;justify-content:space-between;}
+  .cust-item .meta .amt{color:var(--text-dim);font-family:'IBM Plex Mono',monospace;}
+  .empty-note{padding:28px 16px;color:var(--text-faint);font-size:13px;text-align:center;line-height:1.6;}
+
+  /* ---------- detail ---------- */
+  .detail-empty{
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:80px 20px;text-align:center;color:var(--text-faint);font-size:14px;
+  }
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;overflow:hidden;}
+  .cust-head{padding:20px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+  .cust-head h2{margin:0 0 5px;font-size:20px;font-weight:700;}
+  .cust-head .sub{color:var(--text-dim);font-size:13px;display:flex;gap:8px;align-items:center;}
+  .cust-head .sub .sep{color:var(--text-faint);}
+  .totals{text-align:right;}
+  .totals .lbl{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;}
+  .totals .val{font-size:20px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:var(--text);}
+
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px;}
+  @media (max-width:640px){.stat-grid{grid-template-columns:1fr;}}
+  .stat-block{border:1px solid var(--border);border-radius:11px;overflow:hidden;}
+  .stat-block .sb-head{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px;letter-spacing:.03em;}
+  .stat-block.men .sb-head{background:var(--men-soft);color:var(--men);}
+  .stat-block.da .sb-head{background:var(--da-soft);color:var(--da);}
+  .sb-body{padding:14px 16px;}
+  .sb-row{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px dashed var(--border);}
+  .sb-row:last-of-type{border-bottom:none;}
+  .sb-row .k{color:var(--text-dim);}
+  .sb-row .v{font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  .sb-row .v.warn{color:var(--warn);}
+  .progress-wrap{margin-top:10px;}
+  .progress-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--text-faint);margin-bottom:5px;}
+  .progress-bar{height:6px;background:var(--panel-2);border-radius:20px;overflow:hidden;}
+  .progress-bar > div{height:100%;border-radius:20px;}
+  .stat-block.men .progress-bar>div{background:var(--men);}
+  .stat-block.da .progress-bar>div{background:var(--da);}
+  .no-report{padding:14px 16px;color:var(--text-faint);font-size:12.5px;font-style:italic;}
+
+  /* history */
+  .hist-head{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+  .hist-head h3{margin:0;font-size:14px;font-weight:700;}
+  .hist-head .n{color:var(--text-faint);font-size:12.5px;}
+  .month-filter{display:flex;gap:6px;flex-wrap:wrap;padding:0 22px 14px;}
+  .mchip{
+    font-size:12px;padding:5px 11px;border-radius:20px;border:1px solid var(--border);color:var(--text-dim);
+    cursor:pointer;font-family:'IBM Plex Mono',monospace;transition:.15s;
+  }
+  .mchip:hover{border-color:#3a4552;}
+  .mchip.active{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:600;}
+
+  .month-group{border-top:1px solid var(--border);}
+  .month-group .mg-head{
+    padding:9px 22px;background:var(--panel-2);display:flex;justify-content:space-between;
+    font-size:12px;color:var(--text-dim);
+  }
+  .month-group .mg-head b{color:var(--text);font-family:'IBM Plex Mono',monospace;}
+  .hist-item{
+    padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:14px;align-items:flex-start;
+  }
+  .hist-item:first-child{border-top:none;}
+  .hist-item .left{min-width:0;}
+  .hist-item .date{font-size:12px;color:var(--text-faint);font-family:'IBM Plex Mono',monospace;margin-bottom:3px;}
+  .hist-item .note{font-size:13.5px;color:var(--text);word-break:break-word;}
+  .hist-item .tags{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;}
+  .tag{font-size:10.5px;padding:2px 7px;border-radius:5px;background:var(--panel-2);color:var(--text-faint);border:1px solid var(--border);}
+  .hist-item .right{text-align:right;flex-shrink:0;}
+  .hist-item .amt{font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);font-size:13.5px;}
+  .hist-item mark{background:rgba(201,134,63,.35);color:inherit;border-radius:2px;padding:0 1px;}
+  .hist-empty{padding:30px 22px;color:var(--text-faint);font-size:13px;text-align:center;}
+
+  footer{margin-top:30px;text-align:center;color:var(--text-faint);font-size:11.5px;line-height:1.8;}
+  footer code{background:var(--panel-2);padding:1px 6px;border-radius:5px;}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header class="top">
+    <div class="brand">
+      <div class="tile"><span class="swatch" style="background:var(--men)"></span><span class="swatch" style="background:var(--da)"></span></div>
+      <h1>Tra cứu Giá trị Cấp mẫu DSM</h1>
+      <p>Tìm khách hàng, xem định mức và lịch sử xuất mẫu theo thời gian thực từ Google Sheet</p>
+    </div>
+    <div>
+      <div class="status" id="statusLine"><span class="dot"></span><span id="statusText">Đang tải dữ liệu…</span></div>
+      <div style="margin-top:8px;text-align:right;">
+        <button class="refresh" id="refreshBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
+          Làm mới
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="searchbar">
+    <div class="searchbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="searchInput" type="text" placeholder="Tìm khách hàng, mã đơn hàng, ghi chú, kho…" autocomplete="off">
+    </div>
+  </div>
+  <div class="region-scroll" id="regionChips"></div>
+
+  <div class="layout" style="margin-top:18px;">
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Khách hàng</h3>
+        <span class="count-pill" id="custCount">–</span>
+      </div>
+      <div class="cust-list" id="custList">
+        <div class="empty-note">Đang tải…</div>
+      </div>
+    </div>
+
+    <div id="detailArea">
+      <div class="detail-empty">Chọn một khách hàng bên trái để xem chi tiết định mức và lịch sử xuất mẫu.</div>
+    </div>
+  </div>
+
+  <footer>
+    Dữ liệu đọc trực tiếp từ Google Sheet &nbsp;·&nbsp; nguồn: <code id="sheetIdShown">–</code><br>
+    Bảng tổng hợp MEN/ĐÁ phản ánh tháng <b id="reportMonthShown">–</b> đang được chọn trên sheet · Lịch sử xuất được tổng hợp độc lập theo mọi ngày ghi nhận
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   CẤU HÌNH — chỉnh ở đây nếu cấu trúc sheet thay đổi
+   ============================================================ */
+const SHEET_ID = "1R43NtN3fO9EkJ7hZLBMTlH_nT0qf6sthA7zHIUirv1U";
+const RAW_SHEET_NAME    = "Data_Update mỗi ngày_Theo Odoo"; // dữ liệu thô từng đơn hàng
+const REPORT_SHEET_NAME = "REPORT V2.";                      // báo cáo tổng hợp theo tháng đang chọn
+
+// Vị trí cột (0-based) trong tab dữ liệu thô — khớp với ảnh chụp màn hình sheet
+const RAW = {
+  ngayDuKien:0, ngayHieuLuc:1, maDonHang:2, nhanVien:3, khachHang:4,
+  khuVuc:5, tinhTP:6, ghiChu:7, soXe:8, kho:9, trangThai:10, tongTien:11,
+  ngayTinhDSM:14, tenChuan:15, maNhom:16
+};
+// Vị trí cột trong tab REPORT V2. (được dò tự động theo dòng tiêu đề "Khách hàng")
+const REP = {
+  khuVuc:1, khachHang:2,
+  men_tonDauKy:3, men_dinhMuc:4, men_tongDung:5, men_daXuat:6, men_tonCuoiKy:7, men_vuot:8,
+  da_tonDauKy:9, da_dinhMuc:10, da_tongDung:11, da_daXuat:12, da_tonCuoiKy:13, da_vuot:14
+};
+
+const REFRESH_MS = 5 * 60 * 1000; // tự làm mới mỗi 5 phút
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let customers = {};      // tenChuan -> { khuVuc, entries:[], totalAll, byMonth:{} }
+let reportMap = {};      // khachHang -> report row object
+let reportMeta = { month:"", region:"", updated:"" };
+let regions = [];
+let selectedCustomer = null;
+let activeRegion = "Tất cả";
+let activeMonthFilter = null; // within detail history
+
+/* ============================================================
+   FETCH & PARSE
+   ============================================================ */
+async function fetchSheetRows(sheetName){
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("HTTP " + res.status);
+  const text = await res.text();
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if(start === -1) throw new Error("Không đọc được dữ liệu (sheet có thể chưa public)");
+  const json = JSON.parse(text.substring(start, end+1));
+  if(json.status === "error"){
+    throw new Error((json.errors && json.errors[0] && json.errors[0].detailed_message) || "Lỗi truy vấn sheet");
+  }
+  const table = json.table;
+  // Chuẩn hoá: mỗi dòng thành mảng giá trị hiển thị (.f khi có, .v khi không), giữ nguyên .v để tính toán
+  const rows = table.rows.map(r => (r.c || []).map(c => c ? { v: c.v, f: (c.f !== undefined ? c.f : c.v) } : { v:null, f:"" }));
+  return rows;
+}
+
+function cell(row, idx){ return row[idx] || { v:null, f:"" }; }
+function txt(row, idx){ const c = cell(row, idx); return (c.f ?? c.v ?? "").toString().trim(); }
+function num(row, idx){ const c = cell(row, idx); return typeof c.v === "number" ? c.v : (parseFloat(c.v) || 0); }
+
+function parseGvizDate(row, idx){
+  const c = cell(row, idx);
+  if(typeof c.v === "string" && c.v.startsWith("Date(")){
+    const parts = c.v.slice(5,-1).split(",").map(Number);
+    return new Date(parts[0], parts[1], parts[2]||1);
+  }
+  if(c.f) {
+    // dạng dd/mm/yyyy hoặc yyyy-mm-dd
+    const m1 = c.f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m1) return new Date(+m1[3], +m1[2]-1, +m1[1]);
+    const m2 = c.f.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+  }
+  return null;
+}
+
+function fmtVND(n){
+  return Math.round(n).toLocaleString("vi-VN");
+}
+function fmtDate(d){
+  if(!d) return "—";
+  const dd = String(d.getDate()).padStart(2,"0");
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+function monthKey(d){ return d ? `${d.getMonth()+1}/${d.getFullYear()}` : "—"; }
+
+/* ---------- build từ dữ liệu thô ---------- */
+function buildCustomers(rows){
+  const out = {};
+  // Bỏ dòng tiêu đề nếu có lẫn trong rows (khi gviz không tự nhận header)
+  for(const row of rows){
+    const tenChuan = txt(row, RAW.tenChuan);
+    const ngay = parseGvizDate(row, RAW.ngayTinhDSM);
+    if(!tenChuan || tenChuan === "Tên chuẩn") continue;
+    if(!ngay) continue; // chưa có "Ngày tính DSM" nghĩa là chưa được tính là đã xuất
+    if(!out[tenChuan]){
+      out[tenChuan] = { khuVuc:{}, entries:[], totalAll:0, byMonth:{} };
+    }
+    const c = out[tenChuan];
+    const kv = txt(row, RAW.khuVuc) || "—";
+    c.khuVuc[kv] = (c.khuVuc[kv]||0) + 1;
+    const tien = num(row, RAW.tongTien);
+    const mk = monthKey(ngay);
+    c.entries.push({
+      ngay, mk,
+      maDonHang: txt(row, RAW.maDonHang),
+      khachHang: txt(row, RAW.khachHang),
+      ghiChu: txt(row, RAW.ghiChu),
+      kho: txt(row, RAW.kho),
+      trangThai: txt(row, RAW.trangThai),
+      tien,
+      raw: row
+    });
+    c.totalAll += tien;
+    c.byMonth[mk] = (c.byMonth[mk]||0) + tien;
+  }
+  // chốt khu vực phổ biến nhất cho mỗi khách hàng, sort entries mới nhất trước
+  for(const name in out){
+    const c = out[name];
+    c.khuVucChinh = Object.entries(c.khuVuc).sort((a,b)=>b[1]-a[1])[0][0];
+    c.entries.sort((a,b)=> b.ngay - a.ngay);
+  }
+  return out;
+}
+
+/* ---------- build từ REPORT V2. ---------- */
+function buildReport(rows){
+  const map = {};
+  let headerIdx = -1;
+  for(let i=0;i<rows.length;i++){
+    if(txt(rows[i], REP.khachHang) === "Khách hàng"){ headerIdx = i; break; }
+  }
+  const meta = { month:"", region:"", updated:"" };
+  // Dò dòng chứa "Tháng" để lấy tháng & vùng & ngày cập nhật đang chọn trên sheet
+  for(const row of rows){
+    for(let i=0;i<row.length;i++){
+      const t = txt(row, i);
+      if(t === "Tháng" && row[i+1]) meta.month = txt(row, i+1);
+      if(t.includes("Miền/Khu vực") && row[i+1]) meta.region = txt(row, i+1);
+      if(t.startsWith("Cập nhật ngày")) meta.updated = t.replace("Cập nhật ngày:", "").trim();
+    }
+  }
+  if(headerIdx === -1) return { map, meta };
+  for(let i = headerIdx+1; i < rows.length; i++){
+    const row = rows[i];
+    const name = txt(row, REP.khachHang);
+    if(!name) break; // hết bảng
+    map[name] = {
+      khuVuc: txt(row, REP.khuVuc),
+      men:{
+        tonDauKy:num(row,REP.men_tonDauKy), dinhMuc:num(row,REP.men_dinhMuc),
+        tongDung:num(row,REP.men_tongDung), daXuat:num(row,REP.men_daXuat),
+        tonCuoiKy:num(row,REP.men_tonCuoiKy), vuot:num(row,REP.men_vuot)
+      },
+      da:{
+        tonDauKy:num(row,REP.da_tonDauKy), dinhMuc:num(row,REP.da_dinhMuc),
+        tongDung:num(row,REP.da_tongDung), daXuat:num(row,REP.da_daXuat),
+        tonCuoiKy:num(row,REP.da_tonCuoiKy), vuot:num(row,REP.da_vuot)
+      }
+    };
+  }
+  return { map, meta };
+}
+
+/* ============================================================
+   LOAD
+   ============================================================ */
+async function loadAll(isRefresh){
+  const statusText = document.getElementById("statusText");
+  const statusLine = document.getElementById("statusLine");
+  statusLine.classList.remove("err");
+  statusText.textContent = isRefresh ? "Đang làm mới…" : "Đang tải dữ liệu…";
+  const btn = document.getElementById("refreshBtn");
+  btn.querySelector("svg").classList.add("spin");
+  try{
+    const [rawRows, reportRows] = await Promise.all([
+      fetchSheetRows(RAW_SHEET_NAME),
+      fetchSheetRows(REPORT_SHEET_NAME)
+    ]);
+    customers = buildCustomers(rawRows);
+    const rep = buildReport(reportRows);
+    reportMap = rep.map;
+    reportMeta = rep.meta;
+
+    regions = ["Tất cả", ...Array.from(new Set(Object.values(customers).map(c=>c.khuVucChinh))).sort()];
+    renderRegionChips();
+    renderCustomerList();
+    if(selectedCustomer && customers[selectedCustomer]) renderDetail(selectedCustomer);
+
+    document.getElementById("sheetIdShown").textContent = SHEET_ID;
+    document.getElementById("reportMonthShown").textContent = reportMeta.month || "—";
+    statusText.textContent = `Đã cập nhật · ${new Date().toLocaleTimeString("vi-VN")}`;
+  }catch(err){
+    console.error(err);
+    statusLine.classList.add("err");
+    statusText.textContent = "Không tải được dữ liệu — kiểm tra quyền chia sẻ sheet (Anyone with link – Viewer)";
+  }finally{
+    btn.querySelector("svg").classList.remove("spin");
+  }
+}
+
+/* ============================================================
+   RENDER: region chips
+   ============================================================ */
+function renderRegionChips(){
+  const el = document.getElementById("regionChips");
+  el.innerHTML = "";
+  regions.forEach(r=>{
+    const chip = document.createElement("div");
+    chip.className = "chip" + (r===activeRegion ? " active" : "");
+    chip.textContent = r;
+    chip.onclick = ()=>{ activeRegion = r; renderRegionChips(); renderCustomerList(); };
+    el.appendChild(chip);
+  });
+}
+
+/* ============================================================
+   RENDER: customer list (with search)
+   ============================================================ */
+function matchesSearch(name, c, q){
+  if(!q) return true;
+  q = q.toLowerCase();
+  if(name.toLowerCase().includes(q)) return true;
+  return c.entries.some(e =>
+    (e.maDonHang||"").toLowerCase().includes(q) ||
+    (e.ghiChu||"").toLowerCase().includes(q) ||
+    (e.kho||"").toLowerCase().includes(q) ||
+    (e.trangThai||"").toLowerCase().includes(q) ||
+    (e.khachHang||"").toLowerCase().includes(q)
+  );
+}
+
+function renderCustomerList(){
+  const q = document.getElementById("searchInput").value.trim();
+  const listEl = document.getElementById("custList");
+  const names = Object.keys(customers)
+    .filter(name => (activeRegion==="Tất cả" || customers[name].khuVucChinh===activeRegion))
+    .filter(name => matchesSearch(name, customers[name], q))
+    .sort((a,b)=> customers[b].totalAll - customers[a].totalAll);
+
+  document.getElementById("custCount").textContent = names.length;
+
+  if(names.length===0){
+    listEl.innerHTML = `<div class="empty-note">Không tìm thấy khách hàng phù hợp.</div>`;
+    return;
+  }
+  listEl.innerHTML = "";
+  names.forEach(name=>{
+    const c = customers[name];
+    const item = document.createElement("div");
+    item.className = "cust-item" + (name===selectedCustomer ? " active" : "");
+    item.innerHTML = `
+      <div class="name">${escapeHtml(name)}</div>
+      <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">${fmtVND(c.totalAll)}</span></div>
+    `;
+    item.onclick = ()=>{ selectedCustomer = name; activeMonthFilter = null; renderCustomerList(); renderDetail(name); };
+    listEl.appendChild(item);
+  });
+}
+
+/* ============================================================
+   RENDER: detail panel
+   ============================================================ */
+function statBlock(kind, label, stats){
+  const pct = stats.dinhMuc>0 ? Math.min(100, Math.round(stats.daXuat/stats.dinhMuc*100)) : (stats.daXuat>0?100:0);
+  return `
+    <div class="stat-block ${kind}">
+      <div class="sb-head"><span>${label}</span><span class="mono">${pct}%</span></div>
+      <div class="sb-body">
+        <div class="sb-row"><span class="k">Tồn đầu kỳ</span><span class="v">${fmtVND(stats.tonDauKy)}</span></div>
+        <div class="sb-row"><span class="k">Định mức phát sinh</span><span class="v">${fmtVND(stats.dinhMuc)}</span></div>
+        <div class="sb-row"><span class="k">Đã xuất</span><span class="v">${fmtVND(stats.daXuat)}</span></div>
+        <div class="sb-row"><span class="k">Tồn cuối kỳ</span><span class="v">${fmtVND(stats.tonCuoiKy)}</span></div>
+        <div class="sb-row"><span class="k">Vượt định mức</span><span class="v ${stats.vuot>0?'warn':''}">${fmtVND(stats.vuot)}</span></div>
+        <div class="progress-wrap">
+          <div class="progress-lbl"><span>Tỷ lệ đã dùng</span><span>${pct}%</span></div>
+          <div class="progress-bar"><div style="width:${pct}%"></div></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function escapeHtml(s){
+  return (s||"").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+function highlight(text, q){
+  if(!q) return escapeHtml(text);
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if(idx===-1) return escapeHtml(text);
+  return escapeHtml(text.slice(0,idx)) + "<mark>" + escapeHtml(text.slice(idx,idx+q.length)) + "</mark>" + escapeHtml(text.slice(idx+q.length));
+}
+
+function renderDetail(name){
+  const c = customers[name];
+  const rep = reportMap[name];
+  const q = document.getElementById("searchInput").value.trim();
+
+  const months = Array.from(new Set(c.entries.map(e=>e.mk)));
+  months.sort((a,b)=>{
+    const [ma,ya]=a.split("/").map(Number), [mb,yb]=b.split("/").map(Number);
+    return (yb*12+mb)-(ya*12+ma);
+  });
+
+  let filteredEntries = c.entries.filter(e => matchesSearch(name, {entries:[e]}, q) || !q);
+  if(activeMonthFilter) filteredEntries = filteredEntries.filter(e=>e.mk===activeMonthFilter);
+
+  // group by month for display
+  const groups = {};
+  filteredEntries.forEach(e=>{
+    if(!groups[e.mk]) groups[e.mk] = [];
+    groups[e.mk].push(e);
+  });
+  const groupKeys = Object.keys(groups).sort((a,b)=>{
+    const [ma,ya]=a.split("/").map(Number), [mb,yb]=b.split("/").map(Number);
+    return (yb*12+mb)-(ya*12+ma);
+  });
+
+  let historyHtml = "";
+  if(groupKeys.length===0){
+    historyHtml = `<div class="hist-empty">Không có lịch sử xuất phù hợp.</div>`;
+  }else{
+    groupKeys.forEach(mk=>{
+      const items = groups[mk];
+      const sub = items.reduce((s,e)=>s+e.tien,0);
+      historyHtml += `<div class="month-group">
+        <div class="mg-head"><span>Tháng ${mk}</span><b>${fmtVND(sub)}</b></div>
+        ${items.map(e=>`
+          <div class="hist-item">
+            <div class="left">
+              <div class="date">${fmtDate(e.ngay)}</div>
+              <div class="note">${highlight(e.ghiChu || e.maDonHang || "Xuất mẫu", q)}</div>
+              <div class="tags">
+                ${e.maDonHang?`<span class="tag">${escapeHtml(e.maDonHang)}</span>`:""}
+                ${e.kho?`<span class="tag">${escapeHtml(e.kho)}</span>`:""}
+                ${e.trangThai?`<span class="tag">${escapeHtml(e.trangThai)}</span>`:""}
+              </div>
+            </div>
+            <div class="right"><div class="amt">${fmtVND(e.tien)}</div></div>
+          </div>
+        `).join("")}
+      </div>`;
+    });
+  }
+
+  const monthChips = months.map(mk=>`<div class="mchip${mk===activeMonthFilter?' active':''}" data-mk="${mk}">${mk}</div>`).join("");
+
+  document.getElementById("detailArea").innerHTML = `
+    <div class="card">
+      <div class="cust-head">
+        <div>
+          <h2>${escapeHtml(name)}</h2>
+          <div class="sub"><span>${escapeHtml(c.khuVucChinh)}</span><span class="sep">·</span><span>${c.entries.length} lần xuất</span></div>
+        </div>
+        <div class="totals">
+          <div class="lbl">Tổng đã xuất (toàn bộ lịch sử)</div>
+          <div class="val">${fmtVND(c.totalAll)}</div>
+        </div>
+      </div>
+      ${rep ? `
+        <div class="stat-grid">
+          ${statBlock("men","MEN",rep.men)}
+          ${statBlock("da","ĐÁ",rep.da)}
+        </div>
+      ` : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(reportMeta.month||"hiện tại")}.</div>`}
+    </div>
+
+    <div class="card">
+      <div class="hist-head">
+        <h3>Lịch sử xuất hàng</h3>
+        <span class="n">${filteredEntries.length} bản ghi</span>
+      </div>
+      ${months.length>1 ? `<div class="month-filter">
+        <div class="mchip${activeMonthFilter===null?' active':''}" data-mk="">Tất cả</div>
+        ${monthChips}
+      </div>` : ""}
+      ${historyHtml}
+    </div>
+  `;
+
+  document.querySelectorAll(".mchip").forEach(chip=>{
+    chip.onclick = ()=>{
+      activeMonthFilter = chip.dataset.mk || null;
+      renderDetail(name);
+    };
+  });
+}
+
+/* ============================================================
+   EVENTS
+   ============================================================ */
+document.getElementById("searchInput").addEventListener("input", ()=>{
+  renderCustomerList();
+  if(selectedCustomer) renderDetail(selectedCustomer);
+});
+document.getElementById("refreshBtn").addEventListener("click", ()=>loadAll(true));
+
+loadAll(false);
+setInterval(()=>loadAll(true), REFRESH_MS);
+</script>
+</body>
+</html>
