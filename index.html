@@ -169,6 +169,40 @@
   .hist-item mark{background:rgba(201,134,63,.35);color:inherit;border-radius:2px;padding:0 1px;}
   .hist-empty{padding:30px 22px;color:var(--text-faint);font-size:13px;text-align:center;}
 
+  /* ---------- export modal ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(6,8,10,.65);display:none;align-items:center;justify-content:center;
+    z-index:100;padding:20px;backdrop-filter:blur(2px);
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{
+    background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);
+    width:min(460px,100%);max-height:88vh;overflow-y:auto;
+  }
+  .modal-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .modal-head h3{margin:0;font-size:16px;font-weight:700;}
+  .modal-close{background:none;border:none;color:var(--text-dim);font-size:22px;line-height:1;cursor:pointer;padding:0 4px;}
+  .modal-close:hover{color:var(--text);}
+  .modal-body{padding:18px 20px;}
+  .field-group{margin-bottom:18px;}
+  .field-group:last-child{margin-bottom:0;}
+  .field-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);font-weight:600;margin-bottom:9px;}
+  .radio-row, .check-row{
+    display:flex;align-items:flex-start;gap:9px;font-size:13.5px;color:var(--text);padding:8px 0;cursor:pointer;
+  }
+  .radio-row input, .check-row input{margin-top:2px;accent-color:var(--da);width:15px;height:15px;flex-shrink:0;cursor:pointer;}
+  .radio-row:has(input:disabled), .check-row:has(input:disabled){color:var(--text-faint);cursor:not-allowed;}
+  .modal-note{font-size:12px;color:var(--text-faint);line-height:1.6;margin:4px 0 0;}
+  .modal-foot{padding:16px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;}
+  .btn-secondary, .btn-primary{
+    font-family:inherit;font-size:13.5px;padding:9px 16px;border-radius:9px;cursor:pointer;border:1px solid var(--border);
+  }
+  .btn-secondary{background:transparent;color:var(--text-dim);}
+  .btn-secondary:hover{color:var(--text);border-color:#3a4552;}
+  .btn-primary{background:var(--da);border-color:var(--da);color:#0d1114;font-weight:700;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-primary:disabled{opacity:.5;cursor:not-allowed;filter:none;}
+
   footer{margin-top:30px;text-align:center;color:var(--text-faint);font-size:11.5px;line-height:1.8;}
   footer code{background:var(--panel-2);padding:1px 6px;border-radius:5px;}
 </style>
@@ -184,7 +218,11 @@
     </div>
     <div>
       <div class="status" id="statusLine"><span class="dot"></span><span id="statusText">Đang tải dữ liệu…</span></div>
-      <div style="margin-top:8px;text-align:right;">
+      <div style="margin-top:8px;text-align:right;display:flex;gap:8px;justify-content:flex-end;">
+        <button class="refresh" id="exportBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          Xuất báo cáo
+        </button>
         <button class="refresh" id="refreshBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
           Làm mới
@@ -222,6 +260,38 @@
     Dữ liệu đọc trực tiếp từ Google Sheet &nbsp;·&nbsp; nguồn: <code id="sheetIdShown">–</code><br>
     Bảng tổng hợp MEN/ĐÁ phản ánh tháng <b id="reportMonthShown">–</b> đang được chọn trên sheet · Lịch sử xuất được tổng hợp độc lập theo mọi ngày ghi nhận
   </footer>
+</div>
+
+<div class="modal-overlay" id="exportModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Xuất báo cáo</h3>
+      <button class="modal-close" id="modalClose" aria-label="Đóng">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <div class="field-label">Phạm vi dữ liệu</div>
+        <label class="radio-row">
+          <input type="radio" name="exportScope" value="filtered" checked>
+          <span>Theo bộ lọc đang xem (<b id="scopeCount">0</b> khách hàng<span id="scopeFilterDesc"></span>)</span>
+        </label>
+        <label class="radio-row" id="scopeSelectedRow">
+          <input type="radio" name="exportScope" value="selected">
+          <span>Chỉ khách hàng đang mở: <b id="scopeSelectedName">—</b></span>
+        </label>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Nội dung xuất</div>
+        <label class="check-row"><input type="checkbox" id="chkSummary" checked><span>Bảng tổng hợp theo khách hàng</span></label>
+        <label class="check-row"><input type="checkbox" id="chkDetail"><span>Chi tiết từng lần xuất hàng</span></label>
+      </div>
+      <p class="modal-note">File CSV mở trực tiếp bằng Excel/Google Sheets. Nếu đang lọc theo tháng hoặc miền, báo cáo sẽ chỉ lấy đúng phần đang lọc.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" id="modalCancel">Huỷ</button>
+      <button class="btn-primary" id="modalExport">Tải file CSV</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -521,14 +591,18 @@ function amountFor(c){
   return activeMonth ? (c.byMonth[activeMonth] || 0) : c.totalAll;
 }
 
-function renderCustomerList(){
+function computeFilteredNames(){
   const q = document.getElementById("searchInput").value.trim();
-  const listEl = document.getElementById("custList");
-  const names = Object.keys(customers)
+  return Object.keys(customers)
     .filter(name => (activeRegion==="Tất cả" || customers[name].khuVucChinh===activeRegion))
     .filter(name => matchesSearch(name, customers[name], q))
     .filter(name => !activeMonth || (customers[name].byMonth[activeMonth] || 0) > 0)
     .sort((a,b)=> amountFor(customers[b]) - amountFor(customers[a]));
+}
+
+function renderCustomerList(){
+  const listEl = document.getElementById("custList");
+  const names = computeFilteredNames();
 
   document.getElementById("custCount").textContent = names.length;
 
@@ -549,6 +623,7 @@ function renderCustomerList(){
     listEl.appendChild(item);
   });
 }
+
 
 /* ============================================================
    RENDER: detail panel
@@ -582,13 +657,18 @@ function highlight(text, q){
   return escapeHtml(text.slice(0,idx)) + "<mark>" + escapeHtml(text.slice(idx,idx+q.length)) + "</mark>" + escapeHtml(text.slice(idx+q.length));
 }
 
+function entriesFor(name, q){
+  let entries = customers[name].entries.filter(e => matchesSearch(name, {entries:[e]}, q) || !q);
+  if(activeMonth) entries = entries.filter(e=>e.mk===activeMonth);
+  return entries;
+}
+
 function renderDetail(name){
   const c = customers[name];
   const rep = reportMap[name];
   const q = document.getElementById("searchInput").value.trim();
 
-  let filteredEntries = c.entries.filter(e => matchesSearch(name, {entries:[e]}, q) || !q);
-  if(activeMonth) filteredEntries = filteredEntries.filter(e=>e.mk===activeMonth);
+  let filteredEntries = entriesFor(name, q);
 
   // group by month for display
   const groups = {};
@@ -659,6 +739,128 @@ function renderDetail(name){
 }
 
 /* ============================================================
+   XUẤT BÁO CÁO (CSV)
+   ============================================================ */
+function csvEscape(v){
+  v = (v===null || v===undefined) ? "" : String(v);
+  if(/[;"\n]/.test(v)) v = '"' + v.replace(/"/g,'""') + '"';
+  return v;
+}
+function toCsv(headers, rows){
+  const lines = [headers.map(csvEscape).join(";")];
+  rows.forEach(r => lines.push(headers.map(h=>csvEscape(r[h])).join(";")));
+  return "\uFEFF" + lines.join("\r\n"); // BOM để Excel đọc đúng tiếng Việt
+}
+function downloadCsv(filename, content){
+  const blob = new Blob([content], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function todayStamp(){
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+}
+function scopeSuffix(){
+  const parts = [];
+  if(activeRegion !== "Tất cả") parts.push(activeRegion.replace(/\s+/g,""));
+  if(activeMonth) parts.push("T"+activeMonth.replace("/",""));
+  return parts.length ? "_" + parts.join("_") : "";
+}
+
+function buildSummaryCsv(names){
+  const q = document.getElementById("searchInput").value.trim();
+  const headers = ["Khách hàng","Miền/Khu vực","Số lần xuất","Tổng đã xuất (VNĐ)"];
+  const rows = names.map(name=>{
+    const c = customers[name];
+    const entries = entriesFor(name, q);
+    const total = entries.reduce((s,e)=>s+e.tien,0);
+    return {
+      "Khách hàng": name,
+      "Miền/Khu vực": c.khuVucChinh,
+      "Số lần xuất": entries.length,
+      "Tổng đã xuất (VNĐ)": Math.round(total)
+    };
+  });
+  return toCsv(headers, rows);
+}
+
+function buildDetailCsv(names){
+  const q = document.getElementById("searchInput").value.trim();
+  const headers = ["Khách hàng","Miền/Khu vực","Ngày tính DSM","Mã đơn hàng","Ghi chú","Kho","Trạng thái giao hàng","Số tiền (VNĐ)"];
+  const rows = [];
+  names.forEach(name=>{
+    const c = customers[name];
+    entriesFor(name, q).forEach(e=>{
+      rows.push({
+        "Khách hàng": name,
+        "Miền/Khu vực": c.khuVucChinh,
+        "Ngày tính DSM": fmtDate(e.ngay),
+        "Mã đơn hàng": e.maDonHang,
+        "Ghi chú": e.ghiChu,
+        "Kho": e.kho,
+        "Trạng thái giao hàng": e.trangThai,
+        "Số tiền (VNĐ)": Math.round(e.tien)
+      });
+    });
+  });
+  return toCsv(headers, rows);
+}
+
+function openExportModal(){
+  const filteredNames = computeFilteredNames();
+  document.getElementById("scopeCount").textContent = filteredNames.length;
+  const descBits = [];
+  if(activeRegion !== "Tất cả") descBits.push(activeRegion);
+  if(activeMonth) descBits.push("tháng " + activeMonth);
+  document.getElementById("scopeFilterDesc").textContent = descBits.length ? " · " + descBits.join(", ") : "";
+
+  const selRow = document.getElementById("scopeSelectedRow");
+  const selInput = selRow.querySelector("input");
+  if(selectedCustomer){
+    selRow.style.display = "";
+    selInput.disabled = false;
+    document.getElementById("scopeSelectedName").textContent = selectedCustomer;
+  }else{
+    selRow.style.display = "none";
+    selInput.disabled = true;
+    if(selInput.checked){
+      document.querySelector('input[name="exportScope"][value="filtered"]').checked = true;
+    }
+  }
+  document.getElementById("exportModal").classList.add("show");
+}
+function closeExportModal(){
+  document.getElementById("exportModal").classList.remove("show");
+}
+
+function runExport(){
+  const scope = document.querySelector('input[name="exportScope"]:checked').value;
+  const names = scope === "selected" && selectedCustomer ? [selectedCustomer] : computeFilteredNames();
+  const wantSummary = document.getElementById("chkSummary").checked;
+  const wantDetail = document.getElementById("chkDetail").checked;
+  if(!wantSummary && !wantDetail){
+    alert("Chọn ít nhất một nội dung để xuất.");
+    return;
+  }
+  if(names.length === 0){
+    alert("Không có khách hàng nào phù hợp để xuất.");
+    return;
+  }
+  const stamp = todayStamp();
+  const suffix = scope === "selected" ? "_" + selectedCustomer.replace(/\s+/g,"") : scopeSuffix();
+  if(wantSummary){
+    downloadCsv(`DSM_TongHop${suffix}_${stamp}.csv`, buildSummaryCsv(names));
+  }
+  if(wantDetail){
+    downloadCsv(`DSM_ChiTiet${suffix}_${stamp}.csv`, buildDetailCsv(names));
+  }
+  closeExportModal();
+}
+
+/* ============================================================
    EVENTS
    ============================================================ */
 document.getElementById("searchInput").addEventListener("input", ()=>{
@@ -666,6 +868,13 @@ document.getElementById("searchInput").addEventListener("input", ()=>{
   if(selectedCustomer) renderDetail(selectedCustomer);
 });
 document.getElementById("refreshBtn").addEventListener("click", ()=>loadAll(true));
+document.getElementById("exportBtn").addEventListener("click", openExportModal);
+document.getElementById("modalClose").addEventListener("click", closeExportModal);
+document.getElementById("modalCancel").addEventListener("click", closeExportModal);
+document.getElementById("modalExport").addEventListener("click", runExport);
+document.getElementById("exportModal").addEventListener("click", (e)=>{
+  if(e.target.id === "exportModal") closeExportModal();
+});
 
 loadAll(false);
 setInterval(()=>loadAll(true), REFRESH_MS);
