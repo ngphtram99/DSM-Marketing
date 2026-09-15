@@ -200,6 +200,7 @@
     </div>
   </div>
   <div class="region-scroll" id="regionChips"></div>
+  <div class="region-scroll mono" id="monthChips" style="margin-top:8px;"></div>
 
   <div class="layout" style="margin-top:18px;">
     <div class="panel">
@@ -246,6 +247,12 @@ const REP = {
 
 const REFRESH_MS = 5 * 60 * 1000; // tự làm mới mỗi 5 phút
 
+// Chỉ tính là "đã xuất DSM" nếu cột Ghi chú chung (H) có chứa từ khoá này
+const DSM_KEYWORD = "DSM";
+
+// Danh sách Miền/Khu vực dự phòng, dùng khi không tự dò được bảng miền trong REPORT V2.
+const CANONICAL_REGIONS_FALLBACK = ["Miền Bắc","Miền Trung","Miền Tây","Miền Đông","Hồ Chí Minh","OEM"];
+
 /* ============================================================
    STATE
    ============================================================ */
@@ -255,7 +262,8 @@ let reportMeta = { month:"", region:"", updated:"" };
 let regions = [];
 let selectedCustomer = null;
 let activeRegion = "Tất cả";
-let activeMonthFilter = null; // within detail history
+let activeMonth = null;   // bộ lọc tháng ở cấp toàn trang, vd "9/2026", null = tất cả
+let allMonths = [];       // danh sách tháng có dữ liệu, mới nhất trước
 
 /* ============================================================
    FETCH & PARSE
@@ -316,8 +324,10 @@ function buildCustomers(rows){
   for(const row of rows){
     const tenChuan = txt(row, RAW.tenChuan);
     const ngay = parseGvizDate(row, RAW.ngayTinhDSM);
+    const ghiChu = txt(row, RAW.ghiChu);
     if(!tenChuan || tenChuan === "Tên chuẩn") continue;
     if(!ngay) continue; // chưa có "Ngày tính DSM" nghĩa là chưa được tính là đã xuất
+    if(!ghiChu.toUpperCase().includes(DSM_KEYWORD)) continue; // chỉ lấy phiếu có ghi chú liên quan DSM
     if(!out[tenChuan]){
       out[tenChuan] = { khuVuc:{}, entries:[], totalAll:0, byMonth:{} };
     }
@@ -387,6 +397,27 @@ function buildReport(rows){
   return { map, meta };
 }
 
+/* ---------- dò danh sách miền chuẩn (bảng tổng hợp bên phải REPORT V2.) ---------- */
+function findCanonicalRegions(rows){
+  for(let i=0;i<rows.length;i++){
+    const row = rows[i];
+    // bảng miền chuẩn nằm ở cột phụ bên phải (không phải cột B của bảng chính),
+    // nên chỉ tìm từ cột thứ 10 trở đi để tránh nhầm với tiêu đề bảng chính
+    for(let c=10;c<row.length;c++){
+      if(txt(row, c) === "Miền/Khu vực"){
+        const list = [];
+        for(let r=i+1;r<rows.length;r++){
+          const v = txt(rows[r], c);
+          if(!v) break;
+          list.push(v);
+        }
+        if(list.length) return list;
+      }
+    }
+  }
+  return null;
+}
+
 /* ============================================================
    LOAD
    ============================================================ */
@@ -407,8 +438,19 @@ async function loadAll(isRefresh){
     reportMap = rep.map;
     reportMeta = rep.meta;
 
-    regions = ["Tất cả", ...Array.from(new Set(Object.values(customers).map(c=>c.khuVucChinh))).sort()];
+    const canonical = findCanonicalRegions(reportRows) || CANONICAL_REGIONS_FALLBACK;
+    regions = ["Tất cả", ...canonical];
+
+    const monthSet = new Set();
+    Object.values(customers).forEach(c => Object.keys(c.byMonth).forEach(mk => monthSet.add(mk)));
+    allMonths = Array.from(monthSet).sort((a,b)=>{
+      const [ma,ya]=a.split("/").map(Number), [mb,yb]=b.split("/").map(Number);
+      return (yb*12+mb)-(ya*12+ma);
+    });
+    if(activeMonth && !allMonths.includes(activeMonth)) activeMonth = null;
+
     renderRegionChips();
+    renderMonthChips();
     renderCustomerList();
     if(selectedCustomer && customers[selectedCustomer]) renderDetail(selectedCustomer);
 
@@ -434,7 +476,27 @@ function renderRegionChips(){
     const chip = document.createElement("div");
     chip.className = "chip" + (r===activeRegion ? " active" : "");
     chip.textContent = r;
-    chip.onclick = ()=>{ activeRegion = r; renderRegionChips(); renderCustomerList(); };
+    chip.onclick = ()=>{ activeRegion = r; renderRegionChips(); renderCustomerList(); if(selectedCustomer) renderDetail(selectedCustomer); };
+    el.appendChild(chip);
+  });
+}
+
+/* ============================================================
+   RENDER: month chips (bộ lọc tháng cấp toàn trang)
+   ============================================================ */
+function renderMonthChips(){
+  const el = document.getElementById("monthChips");
+  el.innerHTML = "";
+  const allChip = document.createElement("div");
+  allChip.className = "chip" + (activeMonth===null ? " active" : "");
+  allChip.textContent = "Tất cả các tháng";
+  allChip.onclick = ()=>{ activeMonth = null; renderMonthChips(); renderCustomerList(); if(selectedCustomer) renderDetail(selectedCustomer); };
+  el.appendChild(allChip);
+  allMonths.forEach(mk=>{
+    const chip = document.createElement("div");
+    chip.className = "chip mono" + (mk===activeMonth ? " active" : "");
+    chip.textContent = "Th " + mk;
+    chip.onclick = ()=>{ activeMonth = mk; renderMonthChips(); renderCustomerList(); if(selectedCustomer) renderDetail(selectedCustomer); };
     el.appendChild(chip);
   });
 }
@@ -455,18 +517,23 @@ function matchesSearch(name, c, q){
   );
 }
 
+function amountFor(c){
+  return activeMonth ? (c.byMonth[activeMonth] || 0) : c.totalAll;
+}
+
 function renderCustomerList(){
   const q = document.getElementById("searchInput").value.trim();
   const listEl = document.getElementById("custList");
   const names = Object.keys(customers)
     .filter(name => (activeRegion==="Tất cả" || customers[name].khuVucChinh===activeRegion))
     .filter(name => matchesSearch(name, customers[name], q))
-    .sort((a,b)=> customers[b].totalAll - customers[a].totalAll);
+    .filter(name => !activeMonth || (customers[name].byMonth[activeMonth] || 0) > 0)
+    .sort((a,b)=> amountFor(customers[b]) - amountFor(customers[a]));
 
   document.getElementById("custCount").textContent = names.length;
 
   if(names.length===0){
-    listEl.innerHTML = `<div class="empty-note">Không tìm thấy khách hàng phù hợp.</div>`;
+    listEl.innerHTML = `<div class="empty-note">Không tìm thấy khách hàng phù hợp${activeMonth ? " trong tháng " + activeMonth : ""}.</div>`;
     return;
   }
   listEl.innerHTML = "";
@@ -476,9 +543,9 @@ function renderCustomerList(){
     item.className = "cust-item" + (name===selectedCustomer ? " active" : "");
     item.innerHTML = `
       <div class="name">${escapeHtml(name)}</div>
-      <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">${fmtVND(c.totalAll)}</span></div>
+      <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">${fmtVND(amountFor(c))}</span></div>
     `;
-    item.onclick = ()=>{ selectedCustomer = name; activeMonthFilter = null; renderCustomerList(); renderDetail(name); };
+    item.onclick = ()=>{ selectedCustomer = name; renderCustomerList(); renderDetail(name); };
     listEl.appendChild(item);
   });
 }
@@ -520,14 +587,8 @@ function renderDetail(name){
   const rep = reportMap[name];
   const q = document.getElementById("searchInput").value.trim();
 
-  const months = Array.from(new Set(c.entries.map(e=>e.mk)));
-  months.sort((a,b)=>{
-    const [ma,ya]=a.split("/").map(Number), [mb,yb]=b.split("/").map(Number);
-    return (yb*12+mb)-(ya*12+ma);
-  });
-
   let filteredEntries = c.entries.filter(e => matchesSearch(name, {entries:[e]}, q) || !q);
-  if(activeMonthFilter) filteredEntries = filteredEntries.filter(e=>e.mk===activeMonthFilter);
+  if(activeMonth) filteredEntries = filteredEntries.filter(e=>e.mk===activeMonth);
 
   // group by month for display
   const groups = {};
@@ -567,18 +628,16 @@ function renderDetail(name){
     });
   }
 
-  const monthChips = months.map(mk=>`<div class="mchip${mk===activeMonthFilter?' active':''}" data-mk="${mk}">${mk}</div>`).join("");
-
   document.getElementById("detailArea").innerHTML = `
     <div class="card">
       <div class="cust-head">
         <div>
           <h2>${escapeHtml(name)}</h2>
-          <div class="sub"><span>${escapeHtml(c.khuVucChinh)}</span><span class="sep">·</span><span>${c.entries.length} lần xuất</span></div>
+          <div class="sub"><span>${escapeHtml(c.khuVucChinh)}</span><span class="sep">·</span><span>${c.entries.length} lần xuất${activeMonth ? " (đang lọc tháng " + activeMonth + ")" : ""}</span></div>
         </div>
         <div class="totals">
-          <div class="lbl">Tổng đã xuất (toàn bộ lịch sử)</div>
-          <div class="val">${fmtVND(c.totalAll)}</div>
+          <div class="lbl">${activeMonth ? "Tổng đã xuất · tháng " + activeMonth : "Tổng đã xuất (toàn bộ lịch sử)"}</div>
+          <div class="val">${fmtVND(amountFor(c))}</div>
         </div>
       </div>
       ${rep ? `
@@ -592,22 +651,11 @@ function renderDetail(name){
     <div class="card">
       <div class="hist-head">
         <h3>Lịch sử xuất hàng</h3>
-        <span class="n">${filteredEntries.length} bản ghi</span>
+        <span class="n">${filteredEntries.length} bản ghi${activeMonth ? " · tháng " + activeMonth : ""}</span>
       </div>
-      ${months.length>1 ? `<div class="month-filter">
-        <div class="mchip${activeMonthFilter===null?' active':''}" data-mk="">Tất cả</div>
-        ${monthChips}
-      </div>` : ""}
       ${historyHtml}
     </div>
   `;
-
-  document.querySelectorAll(".mchip").forEach(chip=>{
-    chip.onclick = ()=>{
-      activeMonthFilter = chip.dataset.mk || null;
-      renderDetail(name);
-    };
-  });
 }
 
 /* ============================================================
