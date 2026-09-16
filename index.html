@@ -136,6 +136,12 @@
   .stat-block.men .progress-bar>div{background:var(--men);}
   .stat-block.da .progress-bar>div{background:var(--da);}
   .no-report{padding:14px 16px;color:var(--text-faint);font-size:12.5px;font-style:italic;}
+  .cap-mau-line{
+    margin:16px 18px 0;padding:12px 16px;border:1px solid var(--border);border-radius:10px;
+    background:linear-gradient(90deg, var(--men-soft), var(--da-soft));
+    display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-dim);
+  }
+  .cap-mau-line b{font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--text);}
   .stat-loading{padding:20px 16px;color:var(--text-faint);font-size:13px;text-align:center;}
   .report-warning{
     margin:18px;padding:14px 16px;border:1px solid rgba(217,99,74,.35);background:rgba(217,99,74,.08);
@@ -326,7 +332,8 @@ const RAW = {
 const REP = {
   khuVuc:1, khachHang:2,
   men_tonDauKy:3, men_dinhMuc:4, men_tongDung:5, men_daXuat:6, men_tonCuoiKy:7, men_vuot:8,
-  da_tonDauKy:9, da_dinhMuc:10, da_tongDung:11, da_daXuat:12, da_tonCuoiKy:13, da_vuot:14
+  da_tonDauKy:9, da_dinhMuc:10, da_tongDung:11, da_daXuat:12, da_tonCuoiKy:13, da_vuot:14,
+  tongTienCapMau:15
 };
 
 const REFRESH_MS = 5 * 60 * 1000; // tự làm mới mỗi 5 phút
@@ -549,7 +556,8 @@ function buildReport(rows){
         tonDauKy:num(row,REP.da_tonDauKy), dinhMuc:num(row,REP.da_dinhMuc),
         tongDung:num(row,REP.da_tongDung), daXuat:num(row,REP.da_daXuat),
         tonCuoiKy:num(row,REP.da_tonCuoiKy), vuot:num(row,REP.da_vuot)
-      }
+      },
+      tongTienCapMau: num(row, REP.tongTienCapMau)
     };
   }
   return { map, meta };
@@ -746,6 +754,15 @@ function statBlock(kind, label, stats){
     </div>`;
 }
 
+/** Dòng "Tổng tiền cấp mẫu" (cột P trong REPORT V2.) — hạn mức tổng chung cho khách hàng, không tách MEN/ĐÁ */
+function capMauLine(rep){
+  if(!rep || rep.tongTienCapMau === undefined) return "";
+  return `<div class="cap-mau-line">
+    <span>Tổng tiền cấp mẫu (cột P, REPORT V2.)</span>
+    <b>${fmtVND(rep.tongTienCapMau)}</b>
+  </div>`;
+}
+
 function escapeHtml(s){
   return (s||"").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 }
@@ -868,7 +885,7 @@ function renderStatFallbackHtml(rep){
     </div>`;
   }
   if(rep){
-    return `<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`;
+    return `${capMauLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`;
   }
   return `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(reportMeta.month||"hiện tại")}.</div>`;
 }
@@ -897,7 +914,7 @@ async function refreshStatArea(name, targetMonth){
   }
   const rep = repData.map[name];
   statEl.innerHTML = rep
-    ? `<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
+    ? `${capMauLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
     : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(targetMonth)}.</div>`;
 }
 
