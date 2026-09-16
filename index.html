@@ -312,7 +312,7 @@ const REPORT_SHEET_NAME = "REPORT V2.";                      // báo cáo tổng
 // Dán URL Web App Apps Script vào đây sau khi deploy (xem README.md, mục "Apps Script").
 // Để trống "" nếu chưa deploy — web vẫn chạy bình thường, chỉ là bảng MEN/ĐÁ sẽ
 // chỉ đúng cho tháng đang chọn sẵn trên sheet như trước.
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwtohwVSdqkf7P7LWE62FaCeZaeIBM383jXT0t2c4J8G10OV4b7rf19uWhkRwURTBgS/exec";
+const APPS_SCRIPT_URL = "";
 
 // Vị trí cột (0-based) trong tab dữ liệu thô — khớp với ảnh chụp màn hình sheet
 const RAW = {
@@ -421,6 +421,23 @@ function normalizeMonth(m){
   return `${parseInt(parts[0],10)}/${parts[1].trim()}`;
 }
 
+/** Đọc 1 ô bất kỳ (có thể là Date literal của gviz, ngày dd/mm/yyyy, hoặc sẵn "M/yyyy") và trả về đúng "M/yyyy" */
+function monthFromCell(c){
+  if(!c) return "";
+  if(typeof c.v === "string" && c.v.startsWith("Date(")){
+    const parts = c.v.slice(5,-1).split(",").map(Number);
+    return `${parts[1]+1}/${parts[0]}`;
+  }
+  const raw = (c.f ?? c.v ?? "").toString().trim();
+  let m = raw.match(/^(\d{1,2})\/(\d{4})$/);           // đã sẵn dạng M/yyyy hoặc MM/yyyy
+  if(m) return `${parseInt(m[1],10)}/${m[2]}`;
+  m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);     // dd/mm/yyyy
+  if(m) return `${parseInt(m[2],10)}/${m[3]}`;
+  m = raw.match(/^(\d{4})-(\d{1,2})/);                  // yyyy-mm
+  if(m) return `${parseInt(m[2],10)}/${m[1]}`;
+  return raw;
+}
+
 /* ---------- build từ dữ liệu thô ---------- */
 function buildCustomers(rows){
   const out = {};
@@ -474,7 +491,7 @@ function buildReport(rows){
   for(const row of rows){
     for(let i=0;i<row.length;i++){
       const t = txt(row, i);
-      if(t === "Tháng" && row[i+1]) meta.month = txt(row, i+1);
+      if(t === "Tháng" && row[i+1]) meta.month = monthFromCell(row[i+1]);
       if(t.includes("Miền/Khu vực") && row[i+1]) meta.region = txt(row, i+1);
       if(t.startsWith("Cập nhật ngày")) meta.updated = t.replace("Cập nhật ngày:", "").trim();
     }
