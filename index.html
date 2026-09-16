@@ -101,6 +101,7 @@
   .cust-item .name{font-size:14px;font-weight:600;}
   .cust-item .meta{font-size:12px;color:var(--text-faint);display:flex;justify-content:space-between;}
   .cust-item .meta .amt{color:var(--text-dim);font-family:'IBM Plex Mono',monospace;}
+  .cust-item-sub{font-size:11px;color:var(--text-faint);margin-top:2px;text-align:right;}
   .empty-note{padding:28px 16px;color:var(--text-faint);font-size:13px;text-align:center;line-height:1.6;}
 
   /* ---------- detail ---------- */
@@ -698,6 +699,15 @@ function amountFor(c){
   return activeMonth ? (c.byMonth[activeMonth] || 0) : c.totalAll;
 }
 
+/** Lấy "Tổng tiền cấp mẫu" (cột P) cho 1 khách hàng, chỉ dùng dữ liệu đã có sẵn trong cache (không gọi thêm API) */
+function capMauFor(name){
+  const targetMonth = normalizeMonth(activeMonth || reportMeta.month);
+  if(!targetMonth) return null;
+  const cached = reportCache[targetMonth];
+  const rep = cached ? cached.map[name] : (targetMonth === normalizeMonth(reportMeta.month) ? reportMap[name] : null);
+  return (rep && rep.tongTienCapMau !== undefined) ? rep.tongTienCapMau : null;
+}
+
 function computeFilteredNames(){
   const q = document.getElementById("searchInput").value.trim();
   return Object.keys(customers)
@@ -720,12 +730,15 @@ function renderCustomerList(){
   listEl.innerHTML = "";
   names.forEach(name=>{
     const c = customers[name];
+    const capMau = capMauFor(name);
     const item = document.createElement("div");
     item.className = "cust-item" + (name===selectedCustomer ? " active" : "");
-    item.innerHTML = `
-      <div class="name">${escapeHtml(name)}</div>
-      <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">${fmtVND(amountFor(c))}</span></div>
-    `;
+    item.innerHTML = capMau !== null
+      ? `<div class="name">${escapeHtml(name)}</div>
+         <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">${fmtVND(capMau)}</span></div>
+         <div class="cust-item-sub">Đã xuất: ${fmtVND(amountFor(c))}</div>`
+      : `<div class="name">${escapeHtml(name)}</div>
+         <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">${fmtVND(amountFor(c))}</span></div>`;
     item.onclick = ()=>{ selectedCustomer = name; renderCustomerList(); renderDetail(name); };
     listEl.appendChild(item);
   });
@@ -758,7 +771,7 @@ function statBlock(kind, label, stats){
 function capMauLine(rep){
   if(!rep || rep.tongTienCapMau === undefined) return "";
   return `<div class="cap-mau-line">
-    <span>Tổng tiền cấp mẫu (cột P, REPORT V2.)</span>
+    <span>Tổng tiền cấp mẫu</span>
     <b>${fmtVND(rep.tongTienCapMau)}</b>
   </div>`;
 }
@@ -916,6 +929,7 @@ async function refreshStatArea(name, targetMonth){
   statEl.innerHTML = rep
     ? `${capMauLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
     : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(targetMonth)}.</div>`;
+  renderCustomerList(); // để hiện "Tổng tiền cấp mẫu" cho cả danh sách ngay khi cache có dữ liệu tháng này
 }
 
 /* ============================================================
