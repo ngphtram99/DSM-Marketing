@@ -157,7 +157,7 @@
 
   .month-group{border-top:1px solid var(--border);}
   .month-group .mg-head{
-    padding:9px 22px;background:var(--panel-2);display:flex;justify-content:space-between;
+    padding:9px 22px;background:var(--panel-2);display:flex;justify-content:space-between;align-items:flex-start;
     font-size:12px;color:var(--text-dim);
   }
   .month-group .mg-head b{color:var(--text);font-family:'IBM Plex Mono',monospace;}
@@ -170,6 +170,8 @@
   .hist-item .note{font-size:13.5px;color:var(--text);word-break:break-word;}
   .hist-item .tags{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;}
   .tag{font-size:10.5px;padding:2px 7px;border-radius:5px;background:var(--panel-2);color:var(--text-faint);border:1px solid var(--border);}
+  .tag-men{color:var(--men);background:var(--men-soft);border-color:rgba(201,134,63,.35);font-weight:700;}
+  .tag-da{color:var(--da);background:var(--da-soft);border-color:rgba(92,147,171,.35);font-weight:700;}
   .hist-item .right{text-align:right;flex-shrink:0;}
   .hist-item .amt{font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--good);font-size:13.5px;}
   .hist-item mark{background:rgba(201,134,63,.35);color:inherit;border-radius:2px;padding:0 1px;}
@@ -312,7 +314,7 @@ const REPORT_SHEET_NAME = "REPORT V2.";                      // báo cáo tổng
 // Dán URL Web App Apps Script vào đây sau khi deploy (xem README.md, mục "Apps Script").
 // Để trống "" nếu chưa deploy — web vẫn chạy bình thường, chỉ là bảng MEN/ĐÁ sẽ
 // chỉ đúng cho tháng đang chọn sẵn trên sheet như trước.
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwtohwVSdqkf7P7LWE62FaCeZaeIBM383jXT0t2c4J8G10OV4b7rf19uWhkRwURTBgS/exec";
+const APPS_SCRIPT_URL = "";
 
 // Vị trí cột (0-based) trong tab dữ liệu thô — khớp với ảnh chụp màn hình sheet
 const RAW = {
@@ -459,6 +461,16 @@ function monthFromCell(c){
   return raw;
 }
 
+/** Phân loại MEN/ĐÁ dựa theo cột J (Kho). "Porcelain" tính là ĐÁ. */
+function classifyKho(kho){
+  if(!kho) return null;
+  const k = kho.toUpperCase();
+  if(k.includes("PORCELAIN")) return "da";
+  if(k.includes("ĐÁ")) return "da";
+  if(k.includes("MEN")) return "men";
+  return null;
+}
+
 /* ---------- build từ dữ liệu thô ---------- */
 function buildCustomers(rows){
   const out = {};
@@ -471,25 +483,29 @@ function buildCustomers(rows){
     if(!ngay) continue; // chưa có "Ngày tính DSM" nghĩa là chưa được tính là đã xuất
     if(!ghiChu.toUpperCase().includes(DSM_KEYWORD)) continue; // chỉ lấy phiếu có ghi chú liên quan DSM
     if(!out[tenChuan]){
-      out[tenChuan] = { khuVuc:{}, entries:[], totalAll:0, byMonth:{} };
+      out[tenChuan] = { khuVuc:{}, entries:[], totalAll:0, byMonth:{}, menTotal:0, daTotal:0 };
     }
     const c = out[tenChuan];
     const kv = txt(row, RAW.khuVuc) || "—";
     c.khuVuc[kv] = (c.khuVuc[kv]||0) + 1;
     const tien = num(row, RAW.tongTien);
     const mk = monthKey(ngay);
+    const kho = txt(row, RAW.kho);
+    const loai = classifyKho(kho);
     c.entries.push({
       ngay, mk,
       maDonHang: txt(row, RAW.maDonHang),
       khachHang: txt(row, RAW.khachHang),
       ghiChu: txt(row, RAW.ghiChu),
-      kho: txt(row, RAW.kho),
+      kho, loai,
       trangThai: txt(row, RAW.trangThai),
       tien,
       raw: row
     });
     c.totalAll += tien;
     c.byMonth[mk] = (c.byMonth[mk]||0) + tien;
+    if(loai === "men") c.menTotal += tien;
+    else if(loai === "da") c.daTotal += tien;
   }
   // chốt khu vực phổ biến nhất cho mỗi khách hàng, sort entries mới nhất trước
   for(const name in out){
@@ -771,14 +787,25 @@ function renderDetail(name){
     groupKeys.forEach(mk=>{
       const items = groups[mk];
       const sub = items.reduce((s,e)=>s+e.tien,0);
+      const subMen = items.filter(e=>e.loai==="men").reduce((s,e)=>s+e.tien,0);
+      const subDa = items.filter(e=>e.loai==="da").reduce((s,e)=>s+e.tien,0);
       historyHtml += `<div class="month-group">
-        <div class="mg-head"><span>Tháng ${mk}</span><b>${fmtVND(sub)}</b></div>
+        <div class="mg-head">
+          <span>Tháng ${mk}</span>
+          <span style="text-align:right;">
+            <b>${fmtVND(sub)}</b>
+            <div style="font-size:10.5px;color:var(--text-faint);font-weight:400;margin-top:2px;">
+              <span style="color:var(--men);">MEN ${fmtVND(subMen)}</span> · <span style="color:var(--da);">ĐÁ ${fmtVND(subDa)}</span>
+            </div>
+          </span>
+        </div>
         ${items.map(e=>`
           <div class="hist-item">
             <div class="left">
               <div class="date">${fmtDate(e.ngay)}</div>
               <div class="note">${highlight(e.ghiChu || e.maDonHang || "Xuất mẫu", q)}</div>
               <div class="tags">
+                ${e.loai==="men"?`<span class="tag tag-men">MEN</span>`:e.loai==="da"?`<span class="tag tag-da">ĐÁ</span>`:""}
                 ${e.maDonHang?`<span class="tag">${escapeHtml(e.maDonHang)}</span>`:""}
                 ${e.kho?`<span class="tag">${escapeHtml(e.kho)}</span>`:""}
                 ${e.trangThai?`<span class="tag">${escapeHtml(e.trangThai)}</span>`:""}
@@ -796,6 +823,10 @@ function renderDetail(name){
     ? `<div class="stat-loading">⏳ Đang lấy số liệu tháng ${escapeHtml(targetMonth)}…</div>`
     : renderStatFallbackHtml(rep);
 
+  const scopeEntries = activeMonth ? c.entries.filter(e=>e.mk===activeMonth) : c.entries;
+  const menSum = scopeEntries.filter(e=>e.loai==="men").reduce((s,e)=>s+e.tien,0);
+  const daSum = scopeEntries.filter(e=>e.loai==="da").reduce((s,e)=>s+e.tien,0);
+
   document.getElementById("detailArea").innerHTML = `
     <div class="card">
       <div class="cust-head">
@@ -806,6 +837,9 @@ function renderDetail(name){
         <div class="totals">
           <div class="lbl">${activeMonth ? "Tổng đã xuất · tháng " + activeMonth : "Tổng đã xuất (toàn bộ lịch sử)"}</div>
           <div class="val">${fmtVND(amountFor(c))}</div>
+          <div style="font-size:11.5px;margin-top:4px;">
+            <span style="color:var(--men);">MEN ${fmtVND(menSum)}</span> · <span style="color:var(--da);">ĐÁ ${fmtVND(daSum)}</span>
+          </div>
         </div>
       </div>
       <div id="statArea">${statAreaHtml}</div>
@@ -901,15 +935,19 @@ function scopeSuffix(){
 
 function buildSummaryCsv(names){
   const q = document.getElementById("searchInput").value.trim();
-  const headers = ["Khách hàng","Miền/Khu vực","Số lần xuất","Tổng đã xuất (VNĐ)"];
+  const headers = ["Khách hàng","Miền/Khu vực","Số lần xuất","Tổng MEN (VNĐ)","Tổng ĐÁ (VNĐ)","Tổng đã xuất (VNĐ)"];
   const rows = names.map(name=>{
     const c = customers[name];
     const entries = entriesFor(name, q);
     const total = entries.reduce((s,e)=>s+e.tien,0);
+    const men = entries.filter(e=>e.loai==="men").reduce((s,e)=>s+e.tien,0);
+    const da = entries.filter(e=>e.loai==="da").reduce((s,e)=>s+e.tien,0);
     return {
       "Khách hàng": name,
       "Miền/Khu vực": c.khuVucChinh,
       "Số lần xuất": entries.length,
+      "Tổng MEN (VNĐ)": Math.round(men),
+      "Tổng ĐÁ (VNĐ)": Math.round(da),
       "Tổng đã xuất (VNĐ)": Math.round(total)
     };
   });
@@ -918,7 +956,7 @@ function buildSummaryCsv(names){
 
 function buildDetailCsv(names){
   const q = document.getElementById("searchInput").value.trim();
-  const headers = ["Khách hàng","Miền/Khu vực","Ngày tính DSM","Mã đơn hàng","Ghi chú","Kho","Trạng thái giao hàng","Số tiền (VNĐ)"];
+  const headers = ["Khách hàng","Miền/Khu vực","Loại (MEN/ĐÁ)","Ngày tính DSM","Mã đơn hàng","Ghi chú","Kho","Trạng thái giao hàng","Số tiền (VNĐ)"];
   const rows = [];
   names.forEach(name=>{
     const c = customers[name];
@@ -926,6 +964,7 @@ function buildDetailCsv(names){
       rows.push({
         "Khách hàng": name,
         "Miền/Khu vực": c.khuVucChinh,
+        "Loại (MEN/ĐÁ)": e.loai==="men" ? "MEN" : e.loai==="da" ? "ĐÁ" : "",
         "Ngày tính DSM": fmtDate(e.ngay),
         "Mã đơn hàng": e.maDonHang,
         "Ghi chú": e.ghiChu,
