@@ -366,7 +366,28 @@ async function fetchSheetRows(sheetName){
   const table = json.table;
   // Chuẩn hoá: mỗi dòng thành mảng giá trị hiển thị (.f khi có, .v khi không), giữ nguyên .v để tính toán
   const rows = table.rows.map(r => (r.c || []).map(c => c ? { v: c.v, f: (c.f !== undefined ? c.f : c.v) } : { v:null, f:"" }));
+
+  // Google đôi khi tự coi dòng 1 là "dòng tiêu đề" và tách nó ra khỏi rows (đưa vào table.cols),
+  // dù dòng đó thực chất là dữ liệu (vd dòng chứa dropdown "Tháng"/"Miền/Khu vực").
+  // Dựng lại dòng 1 từ table.cols và chèn về đầu rows để không bị mất thông tin này.
+  const cols = table.cols || [];
+  const looksGeneric = cols.length>0 && cols.every((c,idx) => (c.label||"") === colLetter(idx));
+  if(!looksGeneric && cols.length){
+    const reconstructedRow1 = cols.map(c => ({ v: c.label, f: c.label }));
+    rows.unshift(reconstructedRow1);
+  }
   return rows;
+}
+
+/** Chuyển chỉ số cột 0-based thành chữ cột kiểu Google Sheet: 0->A, 1->B, ..., 26->AA */
+function colLetter(n){
+  let s = "", num = n+1;
+  while(num > 0){
+    const rem = (num-1) % 26;
+    s = String.fromCharCode(65+rem) + s;
+    num = Math.floor((num-1)/26);
+  }
+  return s;
 }
 
 /** Gọi Apps Script Web App để lấy đúng số MEN/ĐÁ của 1 tháng bất kỳ (xem AppsScript_Code.gs) */
