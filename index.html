@@ -136,6 +136,12 @@
   .stat-block.men .progress-bar>div{background:var(--men);}
   .stat-block.da .progress-bar>div{background:var(--da);}
   .no-report{padding:14px 16px;color:var(--text-faint);font-size:12.5px;font-style:italic;}
+  .stat-loading{padding:20px 16px;color:var(--text-faint);font-size:13px;text-align:center;}
+  .report-warning{
+    margin:18px;padding:14px 16px;border:1px solid rgba(217,99,74,.35);background:rgba(217,99,74,.08);
+    border-radius:11px;font-size:12.5px;color:var(--text-dim);line-height:1.6;
+  }
+  .report-warning b{color:var(--warn);}
 
   /* history */
   .hist-head{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
@@ -239,6 +245,7 @@
   </div>
   <div class="region-scroll" id="regionChips"></div>
   <div class="region-scroll mono" id="monthChips" style="margin-top:8px;"></div>
+  <p id="monthHint" style="margin:8px 2px 0;font-size:11.5px;color:var(--text-faint);"></p>
 
   <div class="layout" style="margin-top:18px;">
     <div class="panel">
@@ -302,6 +309,11 @@ const SHEET_ID = "1R43NtN3fO9EkJ7hZLBMTlH_nT0qf6sthA7zHIUirv1U";
 const RAW_SHEET_NAME    = "Data_Update mỗi ngày_Theo Odoo"; // dữ liệu thô từng đơn hàng
 const REPORT_SHEET_NAME = "REPORT V2.";                      // báo cáo tổng hợp theo tháng đang chọn
 
+// Dán URL Web App Apps Script vào đây sau khi deploy (xem README.md, mục "Apps Script").
+// Để trống "" nếu chưa deploy — web vẫn chạy bình thường, chỉ là bảng MEN/ĐÁ sẽ
+// chỉ đúng cho tháng đang chọn sẵn trên sheet như trước.
+const APPS_SCRIPT_URL = "";
+
 // Vị trí cột (0-based) trong tab dữ liệu thô — khớp với ảnh chụp màn hình sheet
 const RAW = {
   ngayDuKien:0, ngayHieuLuc:1, maDonHang:2, nhanVien:3, khachHang:4,
@@ -327,8 +339,9 @@ const CANONICAL_REGIONS_FALLBACK = ["Miền Bắc","Miền Trung","Miền Tây",
    STATE
    ============================================================ */
 let customers = {};      // tenChuan -> { khuVuc, entries:[], totalAll, byMonth:{} }
-let reportMap = {};      // khachHang -> report row object
+let reportMap = {};      // khachHang -> report row object (tháng đang chọn sẵn trên sheet)
 let reportMeta = { month:"", region:"", updated:"" };
+let reportCache = {};    // normalizeMonth(tháng) -> {map, meta} — cache kết quả gọi Apps Script
 let regions = [];
 let selectedCustomer = null;
 let activeRegion = "Tất cả";
@@ -354,6 +367,21 @@ async function fetchSheetRows(sheetName){
   // Chuẩn hoá: mỗi dòng thành mảng giá trị hiển thị (.f khi có, .v khi không), giữ nguyên .v để tính toán
   const rows = table.rows.map(r => (r.c || []).map(c => c ? { v: c.v, f: (c.f !== undefined ? c.f : c.v) } : { v:null, f:"" }));
   return rows;
+}
+
+/** Gọi Apps Script Web App để lấy đúng số MEN/ĐÁ của 1 tháng bất kỳ (xem AppsScript_Code.gs) */
+async function getReportForMonth(month){
+  const key = normalizeMonth(month);
+  if(reportCache[key]) return reportCache[key];
+  if(!APPS_SCRIPT_URL) return null;
+  const url = `${APPS_SCRIPT_URL}?month=${encodeURIComponent(month)}&region=${encodeURIComponent("Tất cả")}&_=${Date.now()}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("HTTP " + res.status);
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || "Apps Script trả về lỗi không rõ");
+  const result = { map: json.customers || {}, meta: { month: json.month, region: json.region, updated: json.updatedAt } };
+  reportCache[key] = result;
+  return result;
 }
 
 function cell(row, idx){ return row[idx] || { v:null, f:"" }; }
@@ -386,6 +414,12 @@ function fmtDate(d){
   return `${dd}/${mm}/${d.getFullYear()}`;
 }
 function monthKey(d){ return d ? `${d.getMonth()+1}/${d.getFullYear()}` : "—"; }
+function normalizeMonth(m){
+  if(!m) return "";
+  const parts = m.split("/");
+  if(parts.length !== 2) return m.trim();
+  return `${parseInt(parts[0],10)}/${parts[1].trim()}`;
+}
 
 /* ---------- build từ dữ liệu thô ---------- */
 function buildCustomers(rows){
@@ -507,6 +541,8 @@ async function loadAll(isRefresh){
     const rep = buildReport(reportRows);
     reportMap = rep.map;
     reportMeta = rep.meta;
+    reportCache = {}; // xoá cache mỗi lần tải lại để lấy số mới nhất
+    if(reportMeta.month) reportCache[normalizeMonth(reportMeta.month)] = { map: reportMap, meta: reportMeta };
 
     const canonical = findCanonicalRegions(reportRows) || CANONICAL_REGIONS_FALLBACK;
     regions = ["Tất cả", ...canonical];
@@ -569,6 +605,15 @@ function renderMonthChips(){
     chip.onclick = ()=>{ activeMonth = mk; renderMonthChips(); renderCustomerList(); if(selectedCustomer) renderDetail(selectedCustomer); };
     el.appendChild(chip);
   });
+
+  const hint = document.getElementById("monthHint");
+  if(APPS_SCRIPT_URL){
+    hint.textContent = `Bảng MEN/ĐÁ tự động lấy đúng theo tháng bạn chọn (qua Apps Script).`;
+  }else if(activeMonth && normalizeMonth(activeMonth) !== normalizeMonth(reportMeta.month)){
+    hint.innerHTML = `⚠️ Bảng MEN/ĐÁ chỉ đúng cho tháng <b style="color:var(--warn)">${escapeHtml(reportMeta.month||"?")}</b> (tháng đang chọn trên Google Sheet) — Lịch sử xuất hàng vẫn đúng cho mọi tháng.`;
+  }else{
+    hint.textContent = `Bảng MEN/ĐÁ trong chi tiết khách hàng phản ánh tháng ${reportMeta.month || "—"} đang chọn trên Google Sheet gốc.`;
+  }
 }
 
 /* ============================================================
@@ -708,6 +753,11 @@ function renderDetail(name){
     });
   }
 
+  const targetMonth = activeMonth || normalizeMonth(reportMeta.month);
+  const statAreaHtml = APPS_SCRIPT_URL
+    ? `<div class="stat-loading">⏳ Đang lấy số liệu tháng ${escapeHtml(targetMonth)}…</div>`
+    : renderStatFallbackHtml(rep);
+
   document.getElementById("detailArea").innerHTML = `
     <div class="card">
       <div class="cust-head">
@@ -720,12 +770,7 @@ function renderDetail(name){
           <div class="val">${fmtVND(amountFor(c))}</div>
         </div>
       </div>
-      ${rep ? `
-        <div class="stat-grid">
-          ${statBlock("men","MEN",rep.men)}
-          ${statBlock("da","ĐÁ",rep.da)}
-        </div>
-      ` : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(reportMeta.month||"hiện tại")}.</div>`}
+      <div id="statArea">${statAreaHtml}</div>
     </div>
 
     <div class="card">
@@ -736,6 +781,52 @@ function renderDetail(name){
       ${historyHtml}
     </div>
   `;
+
+  if(APPS_SCRIPT_URL) refreshStatArea(name, targetMonth);
+}
+
+/** Hiển thị khi KHÔNG có Apps Script cấu hình: chỉ đúng cho tháng sẵn có trên sheet */
+function renderStatFallbackHtml(rep){
+  const reportMonthMatches = !activeMonth || normalizeMonth(activeMonth) === normalizeMonth(reportMeta.month);
+  if(!reportMonthMatches){
+    return `<div class="report-warning">
+      ⚠️ Bảng MEN/ĐÁ chỉ tính được cho <b>đúng 1 tháng đang chọn trên Google Sheet</b> (hiện là tháng <b>${escapeHtml(reportMeta.month||"?")}</b>).
+      Bạn đang lọc xem tháng <b>${escapeHtml(activeMonth)}</b> nên phần này tạm ẩn để tránh nhầm số liệu.
+      Muốn xem đúng tháng ${escapeHtml(activeMonth)}: đổi dropdown "Tháng" ở ô B1 trên sheet gốc rồi bấm "Làm mới" — hoặc thiết lập Apps Script (xem README) để web tự làm việc này.
+    </div>`;
+  }
+  if(rep){
+    return `<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`;
+  }
+  return `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(reportMeta.month||"hiện tại")}.</div>`;
+}
+
+/** Gọi Apps Script để lấy đúng MEN/ĐÁ theo tháng đang lọc, cập nhật vào #statArea khi có kết quả */
+async function refreshStatArea(name, targetMonth){
+  let repData;
+  try{
+    repData = await getReportForMonth(targetMonth);
+  }catch(err){
+    console.error(err);
+    repData = null;
+    var fetchError = err.message || String(err);
+  }
+  // Nếu người dùng đã chuyển sang khách hàng/tháng khác trong lúc chờ thì bỏ qua kết quả cũ
+  const stillRelevant = selectedCustomer === name && (activeMonth || normalizeMonth(reportMeta.month)) === targetMonth;
+  const statEl = document.getElementById("statArea");
+  if(!stillRelevant || !statEl) return;
+
+  if(!repData){
+    statEl.innerHTML = `<div class="report-warning">
+      ⚠️ Không lấy được số liệu tháng ${escapeHtml(targetMonth)} từ Apps Script${fetchError ? " (" + escapeHtml(fetchError) + ")" : ""}.
+      Kiểm tra lại URL Apps Script trong cấu hình, hoặc thử bấm "Làm mới".
+    </div>`;
+    return;
+  }
+  const rep = repData.map[name];
+  statEl.innerHTML = rep
+    ? `<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
+    : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(targetMonth)}.</div>`;
 }
 
 /* ============================================================
