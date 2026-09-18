@@ -143,6 +143,16 @@
     display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text-dim);
   }
   .cap-mau-line b{font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--text);}
+  .combined-line{
+    margin:12px 18px 0;padding:14px 16px;border:1px solid var(--border);border-radius:10px;
+    background:var(--panel-2);
+  }
+  .combined-line.over{border-color:rgba(217,99,74,.5);background:rgba(217,99,74,.07);}
+  .combined-head{display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:var(--good);margin-bottom:8px;letter-spacing:.02em;}
+  .combined-line.over .combined-head{color:var(--warn);}
+  .combined-row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-dim);padding:3px 0;}
+  .combined-row b{font-family:'IBM Plex Mono',monospace;color:var(--text);font-weight:600;}
+  .combined-row b.warn-text{color:var(--warn);}
   .stat-loading{padding:20px 16px;color:var(--text-faint);font-size:13px;text-align:center;}
   .report-warning{
     margin:18px;padding:14px 16px;border:1px solid rgba(217,99,74,.35);background:rgba(217,99,74,.08);
@@ -783,6 +793,26 @@ function capMauLine(rep){
   </div>`;
 }
 
+/** Tổng hợp MEN+ĐÁ cộng lại — MEN vượt nhưng ĐÁ dư bù qua thì vẫn coi là chưa vượt tổng */
+function combinedSummaryLine(rep){
+  if(!rep || !rep.men || !rep.da) return "";
+  const tongDung = (rep.men.tongDung||0) + (rep.da.tongDung||0);
+  const daXuat = (rep.men.daXuat||0) + (rep.da.daXuat||0);
+  const vuotTong = Math.max(daXuat - tongDung, 0);
+  const conLai = tongDung - daXuat;
+  const pct = tongDung > 0 ? Math.round(daXuat/tongDung*100) : (daXuat>0 ? 100 : 0);
+  const over = vuotTong > 0;
+  return `<div class="combined-line ${over ? 'over' : ''}">
+    <div class="combined-head">
+      <span>Tổng cộng MEN + ĐÁ ${over ? '— ĐANG VƯỢT TỔNG' : '(chưa vượt)'}</span>
+      <span class="mono">${pct}%</span>
+    </div>
+    <div class="combined-row"><span>Tổng được dùng</span><b>${fmtVND(tongDung)}</b></div>
+    <div class="combined-row"><span>Tổng đã xuất</span><b>${fmtVND(daXuat)}</b></div>
+    <div class="combined-row"><span>${over ? 'Vượt tổng định mức' : 'Còn lại (tổng)'}</span><b class="${over?'warn-text':''}">${fmtVND(over ? vuotTong : conLai)}</b></div>
+  </div>`;
+}
+
 function escapeHtml(s){
   return (s||"").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 }
@@ -908,7 +938,7 @@ function renderStatFallbackHtml(rep){
     </div>`;
   }
   if(rep){
-    return `${capMauLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`;
+    return `${capMauLine(rep)}${combinedSummaryLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`;
   }
   return `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(reportMeta.month||"hiện tại")}.</div>`;
 }
@@ -924,7 +954,8 @@ async function refreshStatArea(name, targetMonth){
     var fetchError = err.message || String(err);
   }
   // Nếu người dùng đã chuyển sang khách hàng/tháng khác trong lúc chờ thì bỏ qua kết quả cũ
-  const stillRelevant = selectedCustomer === name && (activeMonth || normalizeMonth(reportMeta.month)) === targetMonth;
+  const currentTarget = activeMonth || (APPS_SCRIPT_URL ? "Tất cả" : normalizeMonth(reportMeta.month));
+  const stillRelevant = selectedCustomer === name && currentTarget === targetMonth;
   const statEl = document.getElementById("statArea");
   if(!stillRelevant || !statEl) return;
 
@@ -936,8 +967,14 @@ async function refreshStatArea(name, targetMonth){
     return;
   }
   const rep = repData.map[name];
+  const allMonthsNote = (targetMonth === "Tất cả" && rep) ? `
+    <div class="report-warning" style="margin-top:0;">
+      ℹ️ Ở chế độ <b>"Tất cả các tháng"</b>, số <b>Tồn đầu kỳ</b> và <b>Tồn cuối kỳ</b> chỉ là cộng dồn thô toàn bộ lịch sử,
+      <b>không</b> áp dụng đúng quy tắc "không cộng dồn số âm qua tháng" mà bạn đang dùng theo từng tháng cụ thể.
+      Muốn xem đúng tồn kho thực tế, hãy chọn 1 tháng cụ thể ở hàng chip phía trên.
+    </div>` : "";
   statEl.innerHTML = rep
-    ? `${capMauLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
+    ? `${capMauLine(rep)}${combinedSummaryLine(rep)}${allMonthsNote}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
     : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(targetMonth)}.</div>`;
   renderCustomerList(); // để hiện "Tổng tiền cấp mẫu" cho cả danh sách ngay khi cache có dữ liệu tháng này
 }
