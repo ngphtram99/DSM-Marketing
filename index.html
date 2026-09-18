@@ -451,8 +451,9 @@ function fmtDate(d){
 function monthKey(d){ return d ? `${d.getMonth()+1}/${d.getFullYear()}` : "—"; }
 function normalizeMonth(m){
   if(!m) return "";
+  m = m.toString().trim().normalize("NFC");
   const parts = m.split("/");
-  if(parts.length !== 2) return m.trim();
+  if(parts.length !== 2) return m;
   return `${parseInt(parts[0],10)}/${parts[1].trim()}`;
 }
 
@@ -463,7 +464,7 @@ function monthFromCell(c){
     const parts = c.v.slice(5,-1).split(",").map(Number);
     return `${parts[1]+1}/${parts[0]}`;
   }
-  const raw = (c.f ?? c.v ?? "").toString().trim();
+  const raw = (c.f ?? c.v ?? "").toString().trim().normalize("NFC");
   let m = raw.match(/^(\d{1,2})\/(\d{4})$/);           // đã sẵn dạng M/yyyy hoặc MM/yyyy
   if(m) return `${parseInt(m[1],10)}/${m[2]}`;
   m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);     // dd/mm/yyyy
