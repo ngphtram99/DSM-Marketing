@@ -342,6 +342,10 @@ const REFRESH_MS = 5 * 60 * 1000; // tự làm mới mỗi 5 phút
 // Chỉ tính là "đã xuất DSM" nếu cột Ghi chú chung (H) có chứa từ khoá này
 const DSM_KEYWORD = "DSM";
 
+// Chỉ tính là "đã xuất" khi Trạng thái giao hàng (cột K) nằm trong danh sách này.
+// Bỏ qua "Đơn hàng sẵn sàng", "Chưa tạo phiếu giao hàng", "Đã hủy"...
+const VALID_TRANG_THAI = ["Hoàn thành", "Kho đã xác nhận"];
+
 // Danh sách Miền/Khu vực dự phòng, dùng khi không tự dò được bảng miền trong REPORT V2.
 const CANONICAL_REGIONS_FALLBACK = ["Miền Bắc","Miền Trung","Miền Tây","Miền Đông","Hồ Chí Minh","OEM"];
 
@@ -487,9 +491,11 @@ function buildCustomers(rows){
     const tenChuan = txt(row, RAW.tenChuan);
     const ngay = parseGvizDate(row, RAW.ngayTinhDSM);
     const ghiChu = txt(row, RAW.ghiChu);
+    const trangThai = txt(row, RAW.trangThai);
     if(!tenChuan || tenChuan === "Tên chuẩn") continue;
     if(!ngay) continue; // chưa có "Ngày tính DSM" nghĩa là chưa được tính là đã xuất
     if(!ghiChu.toUpperCase().includes(DSM_KEYWORD)) continue; // chỉ lấy phiếu có ghi chú liên quan DSM
+    if(!VALID_TRANG_THAI.includes(trangThai)) continue; // chỉ tính phiếu đã Hoàn thành / Kho đã xác nhận
     if(!out[tenChuan]){
       out[tenChuan] = { khuVuc:{}, entries:[], totalAll:0, byMonth:{}, menTotal:0, daTotal:0 };
     }
@@ -506,7 +512,7 @@ function buildCustomers(rows){
       khachHang: txt(row, RAW.khachHang),
       ghiChu: txt(row, RAW.ghiChu),
       kho, loai,
-      trangThai: txt(row, RAW.trangThai),
+      trangThai,
       tien,
       raw: row
     });
