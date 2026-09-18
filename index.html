@@ -708,7 +708,7 @@ function amountFor(c){
 
 /** Lấy "Tổng tiền cấp mẫu" (cột P) cho 1 khách hàng, chỉ dùng dữ liệu đã có sẵn trong cache (không gọi thêm API) */
 function capMauFor(name){
-  const targetMonth = normalizeMonth(activeMonth || reportMeta.month);
+  const targetMonth = normalizeMonth(activeMonth || (APPS_SCRIPT_URL ? "Tất cả" : reportMeta.month));
   if(!targetMonth) return null;
   const cached = reportCache[targetMonth];
   const rep = cached ? cached.map[name] : (targetMonth === normalizeMonth(reportMeta.month) ? reportMap[name] : null);
@@ -855,7 +855,10 @@ function renderDetail(name){
     });
   }
 
-  const targetMonth = activeMonth || normalizeMonth(reportMeta.month);
+  // Khi không lọc theo tháng cụ thể ("Tất cả các tháng"): nếu có Apps Script, luôn yêu cầu đúng
+  // "Tất cả" (không phụ thuộc sheet đang để tháng gì); nếu không có Apps Script thì đành theo
+  // đúng tháng sheet đang để sẵn (giới hạn cũ, đã cảnh báo ở renderStatFallbackHtml).
+  const targetMonth = activeMonth || (APPS_SCRIPT_URL ? "Tất cả" : normalizeMonth(reportMeta.month));
   const statAreaHtml = APPS_SCRIPT_URL
     ? `<div class="stat-loading">⏳ Đang lấy số liệu tháng ${escapeHtml(targetMonth)}…</div>`
     : renderStatFallbackHtml(rep);
