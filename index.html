@@ -967,14 +967,8 @@ async function refreshStatArea(name, targetMonth){
     return;
   }
   const rep = repData.map[name];
-  const allMonthsNote = (targetMonth === "Tất cả" && rep) ? `
-    <div class="report-warning" style="margin-top:0;">
-      ℹ️ Ở chế độ <b>"Tất cả các tháng"</b>, số <b>Tồn đầu kỳ</b> và <b>Tồn cuối kỳ</b> chỉ là cộng dồn thô toàn bộ lịch sử,
-      <b>không</b> áp dụng đúng quy tắc "không cộng dồn số âm qua tháng" mà bạn đang dùng theo từng tháng cụ thể.
-      Muốn xem đúng tồn kho thực tế, hãy chọn 1 tháng cụ thể ở hàng chip phía trên.
-    </div>` : "";
   statEl.innerHTML = rep
-    ? `${capMauLine(rep)}${combinedSummaryLine(rep)}${allMonthsNote}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
+    ? `${capMauLine(rep)}${combinedSummaryLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
     : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(targetMonth)}.</div>`;
   renderCustomerList(); // để hiện "Tổng tiền cấp mẫu" cho cả danh sách ngay khi cache có dữ liệu tháng này
 }
