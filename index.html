@@ -308,10 +308,11 @@
       </div>
       <div class="field-group">
         <div class="field-label">Nội dung xuất</div>
-        <label class="check-row"><input type="checkbox" id="chkSummary" checked><span>Bảng tổng hợp theo khách hàng</span></label>
+        <label class="check-row"><input type="checkbox" id="chkReport" checked><span>Báo cáo theo form REPORT V2 — MEN / ĐÁ, định mức, tồn kho, tổng tiền cấp mẫu (<b id="reportMonthDesc">—</b>)</span></label>
+        <label class="check-row"><input type="checkbox" id="chkSummary"><span>Bảng tổng hợp theo khách hàng</span></label>
         <label class="check-row"><input type="checkbox" id="chkDetail"><span>Chi tiết từng lần xuất hàng</span></label>
       </div>
-      <p class="modal-note">File CSV mở trực tiếp bằng Excel/Google Sheets. Nếu đang lọc theo tháng hoặc miền, báo cáo sẽ chỉ lấy đúng phần đang lọc.</p>
+      <p class="modal-note">File CSV mở trực tiếp bằng Excel/Google Sheets. Báo cáo REPORT V2 lấy theo tháng và miền đang lọc trên web (kèm ô tìm kiếm nếu có gõ tên khách hàng), có dòng Tổng cộng ở cuối.</p>
     </div>
     <div class="modal-foot">
       <button class="btn-secondary" id="modalCancel">Huỷ</button>
@@ -1050,6 +1051,8 @@ function buildDetailCsv(names){
 }
 
 function openExportModal(){
+  const tm = currentTargetMonth();
+  document.getElementById("reportMonthDesc").textContent = tm === "Tất cả" ? "tất cả các tháng" : "tháng " + tm;
   const filteredNames = computeFilteredNames();
   document.getElementById("scopeCount").textContent = filteredNames.length;
   const descBits = [];
@@ -1076,21 +1079,94 @@ function closeExportModal(){
   document.getElementById("exportModal").classList.remove("show");
 }
 
-function runExport(){
+/** Tháng đang dùng cho bảng MEN/ĐÁ: tháng đang lọc, hoặc "Tất cả" nếu không lọc (khi có Apps Script) */
+function currentTargetMonth(){
+  return activeMonth || (APPS_SCRIPT_URL ? "Tất cả" : normalizeMonth(reportMeta.month));
+}
+
+/** Báo cáo theo form REPORT V2 (hàng 4): mỗi khách hàng 1 dòng, MEN 6 cột + ĐÁ 6 cột + Tổng tiền cấp mẫu */
+function buildReportV2Csv(repData, onlyName){
+  const q = document.getElementById("searchInput").value.trim().normalize("NFC").toLowerCase();
+  const order = regions.filter(r => r !== "Tất cả");
+  const regionIdx = r => { const i = order.indexOf((r||"").normalize("NFC")); return i === -1 ? 999 : i; };
+
+  let list = Object.entries(repData.map).map(([name, rep], i) => ({ name, rep, i }));
+  if(onlyName){
+    list = list.filter(x => x.name === onlyName);
+  }else{
+    if(activeRegion !== "Tất cả"){
+      const ar = activeRegion.normalize("NFC");
+      list = list.filter(x => (x.rep.khuVuc||"").normalize("NFC") === ar);
+    }
+    if(q) list = list.filter(x => x.name.normalize("NFC").toLowerCase().includes(q));
+  }
+  list.sort((a,b) => (regionIdx(a.rep.khuVuc) - regionIdx(b.rep.khuVuc)) || (a.i - b.i));
+
+  const metrics = ["Tồn đầu kỳ","Định mức phát sinh","Tổng được sử dụng","Đã xuất","Tồn cuối kỳ","Vượt định mức"];
+  const keys = ["tonDauKy","dinhMuc","tongDung","daXuat","tonCuoiKy","vuot"];
+
+  // Dòng nhóm (giống hàng 3 trong sheet) + dòng tiêu đề (giống hàng 4)
+  const groupRow = ["","",""].concat(["MEN","","","","",""], ["ĐÁ","","","","",""], [""]);
+  const headRow = ["STT","Miền/Khu vực","Khách hàng"].concat(metrics, metrics, ["Tổng tiền cấp mẫu"]);
+
+  const sums = new Array(13).fill(0);
+  const dataRows = list.map((x, idx) => {
+    const vals = keys.map(k => Math.round(x.rep.men[k] || 0))
+      .concat(keys.map(k => Math.round(x.rep.da[k] || 0)))
+      .concat([Math.round(x.rep.tongTienCapMau || 0)]);
+    vals.forEach((v, j) => sums[j] += v);
+    return [idx + 1, x.rep.khuVuc, x.name].concat(vals);
+  });
+  const totalRow = ["","","Tổng cộng"].concat(sums);
+
+  const lines = [groupRow, headRow].concat(dataRows, list.length ? [totalRow] : [])
+    .map(r => r.map(csvEscape).join(";"));
+  return { csv: "\uFEFF" + lines.join("\r\n"), count: list.length };
+}
+
+async function runExport(){
   const scope = document.querySelector('input[name="exportScope"]:checked').value;
-  const names = scope === "selected" && selectedCustomer ? [selectedCustomer] : computeFilteredNames();
+  const wantReport = document.getElementById("chkReport").checked;
   const wantSummary = document.getElementById("chkSummary").checked;
   const wantDetail = document.getElementById("chkDetail").checked;
-  if(!wantSummary && !wantDetail){
+  if(!wantReport && !wantSummary && !wantDetail){
     alert("Chọn ít nhất một nội dung để xuất.");
     return;
   }
-  if(names.length === 0){
-    alert("Không có khách hàng nào phù hợp để xuất.");
+  const names = scope === "selected" && selectedCustomer ? [selectedCustomer] : computeFilteredNames();
+  if((wantSummary || wantDetail) && names.length === 0){
+    alert("Không có khách hàng nào phù hợp để xuất bảng tổng hợp / chi tiết.");
     return;
   }
   const stamp = todayStamp();
   const suffix = scope === "selected" ? "_" + selectedCustomer.replace(/\s+/g,"") : scopeSuffix();
+
+  if(wantReport){
+    const target = currentTargetMonth();
+    const btn = document.getElementById("modalExport");
+    btn.disabled = true;
+    btn.textContent = "Đang lấy số liệu…";
+    let repData = null, errMsg = "";
+    try{
+      repData = await getReportForMonth(target);
+    }catch(err){
+      errMsg = err.message || String(err);
+    }
+    btn.disabled = false;
+    btn.textContent = "Tải file CSV";
+    if(!repData){
+      alert("Không lấy được số liệu REPORT V2 cho " + (target === "Tất cả" ? "chế độ Tất cả các tháng" : "tháng " + target) + (errMsg ? " (" + errMsg + ")" : "") + ". Thử bấm Làm mới rồi xuất lại.");
+      return;
+    }
+    const { csv, count } = buildReportV2Csv(repData, scope === "selected" ? selectedCustomer : null);
+    if(count === 0){
+      alert("Không có khách hàng nào trong báo cáo REPORT V2 khớp với bộ lọc hiện tại.");
+    }else{
+      const monthTag = target === "Tất cả" ? "TatCa" : "T" + target.replace("/", "");
+      const regionTag = scope === "selected" ? "_" + selectedCustomer.replace(/\s+/g,"") : (activeRegion !== "Tất cả" ? "_" + activeRegion.replace(/\s+/g,"") : "");
+      downloadCsv(`DSM_BaoCao_REPORTV2_${monthTag}${regionTag}_${stamp}.csv`, csv);
+    }
+  }
   if(wantSummary){
     downloadCsv(`DSM_TongHop${suffix}_${stamp}.csv`, buildSummaryCsv(names));
   }
