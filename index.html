@@ -367,6 +367,9 @@ let customers = {};      // tenChuan -> { khuVuc, entries:[], totalAll, byMonth:
 let reportMap = {};      // khachHang -> report row object (tháng đang chọn sẵn trên sheet)
 let reportMeta = { month:"", region:"", updated:"" };
 let reportCache = {};    // normalizeMonth(tháng) -> {map, meta} — cache kết quả gọi Apps Script
+let roster = null;       // [{name, khuVuc}] — toàn bộ khách có định mức trong REPORT V2 (kể cả khách chưa xuất lần nào)
+let rosterLoaded = false;
+let reportAlias = {};    // tên khách trong phiếu xuất -> tên khách tương ứng trong REPORT V2 (khi 2 bên ghi tên khác nhau)
 let regions = [];
 let selectedCustomer = null;
 let activeRegion = "Tất cả";
@@ -485,6 +488,56 @@ function monthFromCell(c){
   return raw;
 }
 
+/** Chuẩn hoá tên để so khớp: bỏ khác biệt Unicode, hoa/thường, khoảng trắng thừa */
+function normKey(s){ return (s||"").toString().normalize("NFC").trim().toLowerCase().replace(/\s+/g," "); }
+
+/** Tìm số liệu REPORT V2 của 1 khách (theo đúng tên, hoặc tên đã ghép khi 2 bên ghi tên khác nhau) */
+function repLookup(map, name){
+  if(!map) return undefined;
+  return map[name] || (reportAlias[name] ? map[reportAlias[name]] : undefined);
+}
+
+/** Gộp khách có định mức trong REPORT V2 vào danh sách (khách chưa xuất DSM lần nào vẫn tra cứu được) */
+function mergeRosterCustomers(){
+  if(!roster) return;
+  const canon = regions.filter(r => r !== "Tất cả").map(r => r.normalize("NFC"));
+  const lookup = {};
+  Object.keys(customers).forEach(n => {
+    lookup[normKey(n)] = n;
+    customers[n].entries.forEach(e => {
+      const k = normKey(e.maNhom);
+      if(k && !lookup[k]) lookup[k] = n;
+    });
+  });
+  roster.forEach(r => {
+    const kv = (r.khuVuc || "").normalize("NFC");
+    const hit = lookup[normKey(r.name)];
+    if(hit){
+      if(hit !== r.name) reportAlias[hit] = r.name;
+      if(canon.includes(kv)) customers[hit].khuVucChinh = kv; // theo đúng Miền/Khu vực trong REPORT V2
+      return;
+    }
+    customers[r.name] = {
+      stub: true, khuVuc: {[kv || "—"]: 1}, entries: [], totalAll: 0, byMonth: {},
+      menTotal: 0, daTotal: 0, khuVucChinh: kv || "—"
+    };
+  });
+}
+
+/** Lấy danh sách khách có định mức (chế độ "Tất cả" trả đủ mọi khách) rồi gộp vào danh sách */
+async function loadRoster(){
+  try{
+    const repData = APPS_SCRIPT_URL ? await getReportForMonth("Tất cả") : { map: reportMap };
+    if(!repData || !repData.map) return;
+    roster = Object.entries(repData.map).map(([name, r]) => ({ name, khuVuc: r.khuVuc }));
+    rosterLoaded = true;
+    mergeRosterCustomers();
+    renderCustomerList();
+  }catch(err){
+    console.warn("Không lấy được danh sách khách có định mức:", err);
+  }
+}
+
 /** Phân loại MEN/ĐÁ dựa theo cột J (Kho). "Porcelain" tính là ĐÁ. */
 function classifyKho(kho){
   if(!kho) return null;
@@ -525,6 +578,7 @@ function buildCustomers(rows){
       ghiChu: txt(row, RAW.ghiChu),
       kho, loai,
       trangThai,
+      maNhom: txt(row, RAW.maNhom),
       tien,
       raw: row
     });
@@ -560,6 +614,13 @@ function buildReport(rows){
     }
   }
   if(headerIdx === -1) return { map, meta };
+  // Cột "Vượt sau bù" và "Trạng thái" (bên phải cột P) — dò theo tên tiêu đề
+  let colVuotSauBu = -1, colTrangThai = -1;
+  for(let c = REP.tongTienCapMau + 1; c < Math.min(rows[headerIdx].length, 26); c++){
+    const h = txt(rows[headerIdx], c).normalize("NFC");
+    if(colVuotSauBu === -1 && h === "Vượt sau bù") colVuotSauBu = c;
+    if(colTrangThai === -1 && h === "Trạng thái") colTrangThai = c;
+  }
   for(let i = headerIdx+1; i < rows.length; i++){
     const row = rows[i];
     const name = txt(row, REP.khachHang);
@@ -576,7 +637,9 @@ function buildReport(rows){
         tongDung:num(row,REP.da_tongDung), daXuat:num(row,REP.da_daXuat),
         tonCuoiKy:num(row,REP.da_tonCuoiKy), vuot:num(row,REP.da_vuot)
       },
-      tongTienCapMau: num(row, REP.tongTienCapMau)
+      tongTienCapMau: num(row, REP.tongTienCapMau),
+      vuotSauBu: colVuotSauBu === -1 ? null : num(row, colVuotSauBu),
+      trangThai: colTrangThai === -1 ? "" : txt(row, colTrangThai)
     };
   }
   return { map, meta };
@@ -627,6 +690,8 @@ async function loadAll(isRefresh){
 
     const canonical = findCanonicalRegions(reportRows) || CANONICAL_REGIONS_FALLBACK;
     regions = ["Tất cả", ...canonical];
+    reportAlias = {};
+    mergeRosterCustomers(); // nếu đã có danh sách khách có định mức từ lần tải trước thì gộp lại ngay
 
     const monthSet = new Set();
     Object.values(customers).forEach(c => Object.keys(c.byMonth).forEach(mk => monthSet.add(mk)));
@@ -640,6 +705,7 @@ async function loadAll(isRefresh){
     renderMonthChips();
     renderCustomerList();
     if(selectedCustomer && customers[selectedCustomer]) renderDetail(selectedCustomer);
+    if(!rosterLoaded) loadRoster(); // chạy nền, xong sẽ tự cập nhật danh sách
 
     document.getElementById("sheetIdShown").textContent = SHEET_ID;
     document.getElementById("reportMonthShown").textContent = reportMeta.month || "—";
@@ -722,7 +788,7 @@ function capMauFor(name){
   const targetMonth = normalizeMonth(activeMonth || (APPS_SCRIPT_URL ? "Tất cả" : reportMeta.month));
   if(!targetMonth) return null;
   const cached = reportCache[targetMonth];
-  const rep = cached ? cached.map[name] : (targetMonth === normalizeMonth(reportMeta.month) ? reportMap[name] : null);
+  const rep = cached ? repLookup(cached.map, name) : (targetMonth === normalizeMonth(reportMeta.month) ? repLookup(reportMap, name) : null);
   return (rep && rep.tongTienCapMau !== undefined) ? rep.tongTienCapMau : null;
 }
 
@@ -731,8 +797,8 @@ function computeFilteredNames(){
   return Object.keys(customers)
     .filter(name => (activeRegion==="Tất cả" || customers[name].khuVucChinh===activeRegion))
     .filter(name => matchesSearch(name, customers[name], q))
-    .filter(name => !activeMonth || (customers[name].byMonth[activeMonth] || 0) > 0)
-    .sort((a,b)=> amountFor(customers[b]) - amountFor(customers[a]));
+    .filter(name => !activeMonth || customers[name].stub || (customers[name].byMonth[activeMonth] || 0) > 0)
+    .sort((a,b)=> (amountFor(customers[b]) - amountFor(customers[a])) || a.localeCompare(b, "vi"));
 }
 
 function renderCustomerList(){
@@ -799,13 +865,15 @@ function combinedSummaryLine(rep){
   if(!rep || !rep.men || !rep.da) return "";
   const tongDung = (rep.men.tongDung||0) + (rep.da.tongDung||0);
   const daXuat = (rep.men.daXuat||0) + (rep.da.daXuat||0);
-  const vuotTong = Math.max(daXuat - tongDung, 0);
+  const hasSheetVsb = rep.vuotSauBu !== null && rep.vuotSauBu !== undefined;
+  const vuotTong = hasSheetVsb ? Math.max(rep.vuotSauBu, 0) : Math.max(daXuat - tongDung, 0); // ưu tiên số "Vượt sau bù" của sheet
   const conLai = tongDung - daXuat;
   const pct = tongDung > 0 ? Math.round(daXuat/tongDung*100) : (daXuat>0 ? 100 : 0);
   const over = vuotTong > 0;
+  const status = rep.trangThai ? ` · ${escapeHtml(rep.trangThai)}` : "";
   return `<div class="combined-line ${over ? 'over' : ''}">
     <div class="combined-head">
-      <span>Tổng cộng MEN + ĐÁ ${over ? '— ĐANG VƯỢT TỔNG' : '(chưa vượt)'}</span>
+      <span>Tổng cộng MEN + ĐÁ ${over ? '— ĐANG VƯỢT TỔNG' : '(chưa vượt)'}${status}</span>
       <span class="mono">${pct}%</span>
     </div>
     <div class="combined-row"><span>Tổng được dùng</span><b>${fmtVND(tongDung)}</b></div>
@@ -832,7 +900,7 @@ function entriesFor(name, q){
 
 function renderDetail(name){
   const c = customers[name];
-  const rep = reportMap[name];
+  const rep = repLookup(reportMap, name);
   const q = document.getElementById("searchInput").value.trim();
 
   let filteredEntries = entriesFor(name, q);
@@ -967,7 +1035,7 @@ async function refreshStatArea(name, targetMonth){
     </div>`;
     return;
   }
-  const rep = repData.map[name];
+  const rep = repLookup(repData.map, name);
   statEl.innerHTML = rep
     ? `${capMauLine(rep)}${combinedSummaryLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
     : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(targetMonth)}.</div>`;
@@ -1084,7 +1152,7 @@ function currentTargetMonth(){
   return activeMonth || (APPS_SCRIPT_URL ? "Tất cả" : normalizeMonth(reportMeta.month));
 }
 
-/** Báo cáo theo form REPORT V2 (hàng 4): mỗi khách hàng 1 dòng, MEN 6 cột + ĐÁ 6 cột + Tổng tiền cấp mẫu */
+/** Báo cáo theo form REPORT V2 (hàng 4): mỗi khách hàng 1 dòng, MEN 6 cột + ĐÁ 6 cột + Tổng tiền cấp mẫu + Vượt sau bù + Trạng thái */
 function buildReportV2Csv(repData, onlyName){
   const q = document.getElementById("searchInput").value.trim().normalize("NFC").toLowerCase();
   const order = regions.filter(r => r !== "Tất cả");
@@ -1092,7 +1160,8 @@ function buildReportV2Csv(repData, onlyName){
 
   let list = Object.entries(repData.map).map(([name, rep], i) => ({ name, rep, i }));
   if(onlyName){
-    list = list.filter(x => x.name === onlyName);
+    const wanted = reportAlias[onlyName] || onlyName;
+    list = list.filter(x => x.name === wanted);
   }else{
     if(activeRegion !== "Tất cả"){
       const ar = activeRegion.normalize("NFC");
@@ -1105,19 +1174,22 @@ function buildReportV2Csv(repData, onlyName){
   const metrics = ["Tồn đầu kỳ","Định mức phát sinh","Tổng được sử dụng","Đã xuất","Tồn cuối kỳ","Vượt định mức"];
   const keys = ["tonDauKy","dinhMuc","tongDung","daXuat","tonCuoiKy","vuot"];
 
-  // Dòng nhóm (giống hàng 3 trong sheet) + dòng tiêu đề (giống hàng 4)
-  const groupRow = ["","",""].concat(["MEN","","","","",""], ["ĐÁ","","","","",""], [""]);
-  const headRow = ["STT","Miền/Khu vực","Khách hàng"].concat(metrics, metrics, ["Tổng tiền cấp mẫu"]);
+  // Dòng nhóm (giống hàng 3 trong sheet) + dòng tiêu đề (giống hàng 4), gồm cả "Vượt sau bù" và "Trạng thái"
+  const groupRow = ["","",""].concat(["MEN","","","","",""], ["ĐÁ","","","","",""], ["","",""]);
+  const headRow = ["STT","Miền/Khu vực","Khách hàng"].concat(metrics, metrics, ["Tổng tiền cấp mẫu","Vượt sau bù","Trạng thái"]);
 
-  const sums = new Array(13).fill(0);
+  const sums = new Array(14).fill(0);
+  let hasVuotSauBu = false;
   const dataRows = list.map((x, idx) => {
+    const vsb = (x.rep.vuotSauBu === null || x.rep.vuotSauBu === undefined) ? "" : Math.round(x.rep.vuotSauBu);
+    if(vsb !== "") hasVuotSauBu = true;
     const vals = keys.map(k => Math.round(x.rep.men[k] || 0))
       .concat(keys.map(k => Math.round(x.rep.da[k] || 0)))
-      .concat([Math.round(x.rep.tongTienCapMau || 0)]);
-    vals.forEach((v, j) => sums[j] += v);
-    return [idx + 1, x.rep.khuVuc, x.name].concat(vals);
+      .concat([Math.round(x.rep.tongTienCapMau || 0), vsb]);
+    vals.forEach((v, j) => { if(v !== "") sums[j] += v; });
+    return [idx + 1, x.rep.khuVuc, x.name].concat(vals, [x.rep.trangThai || ""]);
   });
-  const totalRow = ["","","Tổng cộng"].concat(sums);
+  const totalRow = ["","","Tổng cộng"].concat(sums.map((v, j) => (j === 13 && !hasVuotSauBu) ? "" : v), [""]);
 
   const lines = [groupRow, headRow].concat(dataRows, list.length ? [totalRow] : [])
     .map(r => r.map(csvEscape).join(";"));
@@ -1183,7 +1255,7 @@ document.getElementById("searchInput").addEventListener("input", ()=>{
   renderCustomerList();
   if(selectedCustomer) renderDetail(selectedCustomer);
 });
-document.getElementById("refreshBtn").addEventListener("click", ()=>loadAll(true));
+document.getElementById("refreshBtn").addEventListener("click", ()=>{ rosterLoaded = false; loadAll(true); });
 document.getElementById("exportBtn").addEventListener("click", openExportModal);
 document.getElementById("modalClose").addEventListener("click", closeExportModal);
 document.getElementById("modalCancel").addEventListener("click", closeExportModal);
