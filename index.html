@@ -153,6 +153,93 @@
   .combined-row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-dim);padding:3px 0;}
   .combined-row b{font-family:'IBM Plex Mono',monospace;color:var(--text);font-weight:600;}
   .combined-row b.warn-text{color:var(--warn);}
+
+  /* ---------- bảng so sánh MEN | ĐÁ | TỔNG ---------- */
+  .stat-banner{margin:12px 18px 0;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:700;border:1px solid var(--border);}
+  .stat-banner.ok{color:var(--good);background:rgba(95,180,136,.08);border-color:rgba(95,180,136,.3);}
+  .stat-banner.over{color:var(--warn);background:rgba(217,99,74,.1);border-color:rgba(217,99,74,.5);}
+  .stat-banner .sub{font-weight:400;color:var(--text-dim);font-size:12px;}
+  .stat-table-wrap{padding:12px 18px 18px;overflow-x:auto;}
+  .stat-table{width:100%;border-collapse:separate;border-spacing:0;min-width:520px;font-size:13px;}
+  .stat-table th, .stat-table td{padding:9px 12px;border-bottom:1px dashed var(--border);}
+  .stat-table thead th{border-bottom:none;font-size:12px;letter-spacing:.06em;text-align:right;padding-top:10px;padding-bottom:10px;}
+  .stat-table thead th:first-child{width:28%;}
+  .stat-table thead .h-men{background:var(--men-soft);color:var(--men);border-radius:10px 10px 0 0;}
+  .stat-table thead .h-da{background:var(--da-soft);color:var(--da);border-radius:10px 10px 0 0;}
+  .stat-table thead .h-tot{background:var(--panel-2);color:var(--text);border-radius:10px 10px 0 0;border:1px solid var(--border);border-bottom:none;}
+  .stat-table tbody th{text-align:left;font-weight:400;color:var(--text-dim);}
+  .stat-table .th-sub{font-size:10.5px;color:var(--text-faint);}
+  .stat-table td{text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  .stat-table td.c-men{background:rgba(201,134,63,.04);}
+  .stat-table td.c-da{background:rgba(92,147,171,.04);}
+  .stat-table td.c-tot{background:var(--panel-2);border-left:1px solid var(--border);border-right:1px solid var(--border);}
+  .stat-table td.neg{color:var(--warn);}
+  .stat-table tr.row-key th{color:var(--text);font-weight:700;}
+  .stat-table tr.row-key td{font-size:14.5px;}
+  .stat-table tr.row-key td.c-men{color:var(--men);}
+  .stat-table tr.row-key td.c-da{color:var(--da);}
+  .stat-table tbody tr:last-child th, .stat-table tbody tr:last-child td{border-bottom:none;}
+  .stat-table tbody tr:last-child td.c-tot{border-bottom:1px solid var(--border);border-radius:0 0 10px 10px;}
+  .mini-bar{height:6px;background:var(--panel-2);border-radius:20px;overflow:hidden;margin-bottom:4px;}
+  .mini-bar > div{height:100%;border-radius:20px;}
+  .mini-bar .men{background:var(--men);} .mini-bar .da{background:var(--da);} .mini-bar .tot{background:var(--text-dim);}
+  .mini-pct{font-size:11px;color:var(--text-faint);font-weight:400;}
+  .mini-pct.full{color:var(--warn);}
+
+  /* ---------- lịch sử xuất: cột MEN | ĐÁ riêng ---------- */
+  .amt-cols{display:grid;grid-template-columns:repeat(var(--ncols,2),104px);gap:6px;text-align:right;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .amt-cols .ac{color:var(--text-faint);}
+  .amt-cols .ac.val{font-weight:600;}
+  .amt-cols .ac.val.men{color:var(--men);}
+  .amt-cols .ac.val.da{color:var(--da);}
+  .amt-cols .ac.val.other{color:var(--text-dim);}
+  .hist-cols{display:flex;justify-content:space-between;align-items:center;padding:8px 22px;border-bottom:1px solid var(--border);font-size:11px;letter-spacing:.08em;font-weight:700;}
+  .hist-cols .hc-label{color:var(--text-faint);font-weight:600;}
+  .hist-cols .amt-cols .men{color:var(--men);} .hist-cols .amt-cols .da{color:var(--da);} .hist-cols .amt-cols .other{color:var(--text-dim);}
+  .mg-total{font-size:11.5px;color:var(--text-dim);text-align:right;margin-top:4px;font-family:'IBM Plex Mono',monospace;}
+  .mg-total b{color:var(--text);font-size:13px;}
+  .mg-right{flex-shrink:0;}
+  .hist-foot{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 22px;border-top:2px solid var(--border);background:var(--panel-2);font-size:12px;font-weight:700;color:var(--text);}
+  @media (max-width:640px){
+    .hist-item{flex-direction:column;}
+    .hist-item .amt-cols{width:100%;grid-template-columns:repeat(var(--ncols,2),1fr);}
+    .mg-head{flex-direction:column;gap:6px;}
+  }
+
+  /* ---------- 3 thanh hạn mức MEN | ĐÁ | TỔNG ---------- */
+  .meters-title{margin:18px 18px 0;font-size:13.5px;font-weight:700;color:var(--text);}
+  .meters-title .hint{display:block;font-weight:400;font-size:11.5px;color:var(--text-faint);margin-top:2px;}
+  .meters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:12px 18px 0;}
+  @media (max-width:860px){.meters{grid-template-columns:1fr;}}
+  .meter{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--panel);}
+  .meter.men{border-top:3px solid var(--men);}
+  .meter.da{border-top:3px solid var(--da);}
+  .meter.tot{border-top:3px solid var(--text-dim);background:var(--panel-2);}
+  .meter-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .meter-title{font-weight:800;font-size:13px;letter-spacing:.04em;}
+  .meter.men .meter-title{color:var(--men);}
+  .meter.da .meter-title{color:var(--da);}
+  .meter.tot .meter-title{color:var(--text);}
+  .meter-pct{font-size:12px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;}
+  .meter.is-over .meter-pct{color:var(--warn);font-weight:700;}
+  .meter-bar{height:10px;background:var(--bg);border-radius:20px;overflow:hidden;margin-bottom:12px;border:1px solid var(--border);}
+  .meter-bar > div{height:100%;border-radius:20px;}
+  .meter.men .meter-bar > div{background:var(--men);}
+  .meter.da .meter-bar > div{background:var(--da);}
+  .meter.tot .meter-bar > div{background:var(--text-dim);}
+  .meter.is-over .meter-bar > div{background:var(--warn);}
+  .meter-nums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+  .meter-nums .k{display:block;font-size:10.5px;color:var(--text-faint);margin-bottom:3px;}
+  .meter-nums b{font-family:'IBM Plex Mono',monospace;font-size:13px;word-break:break-all;}
+  .meter-nums .key b{font-size:14.5px;color:var(--text);}
+  .meter-nums b.neg{color:var(--warn);}
+  .meter-note{margin-top:10px;font-size:11.5px;color:var(--text-faint);}
+  .meter-note.warn{color:var(--warn);}
+  .stat-details{margin:14px 18px 18px;border:1px solid var(--border);border-radius:10px;}
+  .stat-details summary{cursor:pointer;padding:10px 14px;font-size:12.5px;color:var(--text-dim);}
+  .stat-details summary:hover{color:var(--text);}
+  .stat-details[open] summary{border-bottom:1px solid var(--border);}
+  .stat-details .stat-table-wrap{padding:8px 10px 12px;}
   .stat-loading{padding:20px 16px;color:var(--text-faint);font-size:13px;text-align:center;}
   .report-warning{
     margin:18px;padding:14px 16px;border:1px solid rgba(217,99,74,.35);background:rgba(217,99,74,.08);
@@ -178,6 +265,16 @@
     font-size:12px;color:var(--text-dim);
   }
   .month-group .mg-head b{color:var(--text);font-family:'IBM Plex Mono',monospace;}
+  .mg-note{font-size:11px;font-weight:400;color:var(--text-faint);margin-top:3px;line-height:1.5;max-width:520px;}
+  .mg-note-ok{color:var(--good);}
+  .mg-note-warn{color:var(--warn);font-weight:600;}
+  .run-line{font-size:11px;color:var(--text-faint);margin-top:6px;font-family:'IBM Plex Mono',monospace;}
+  .run-line:empty{display:none;}
+  .run-over{color:var(--warn);}
+  .run-cross{
+    color:var(--warn);font-weight:700;padding:6px 10px;border:1px solid rgba(217,99,74,.5);
+    background:rgba(217,99,74,.1);border-radius:7px;display:inline-block;
+  }
   .hist-item{
     padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:14px;align-items:flex-start;
   }
@@ -551,6 +648,7 @@ function classifyKho(kho){
 /* ---------- build từ dữ liệu thô ---------- */
 function buildCustomers(rows){
   const out = {};
+  let seq = 0; // mã định danh duy nhất cho mỗi phiếu (dùng để đánh dấu "phiếu làm vượt")
   // Bỏ dòng tiêu đề nếu có lẫn trong rows (khi gviz không tự nhận header)
   for(const row of rows){
     const tenChuan = txt(row, RAW.tenChuan);
@@ -572,6 +670,7 @@ function buildCustomers(rows){
     const kho = txt(row, RAW.kho);
     const loai = classifyKho(kho);
     c.entries.push({
+      id: "e" + (seq++),
       ngay, mk,
       maDonHang: txt(row, RAW.maDonHang),
       khachHang: txt(row, RAW.khachHang),
@@ -832,54 +931,84 @@ function renderCustomerList(){
 /* ============================================================
    RENDER: detail panel
    ============================================================ */
-function statBlock(kind, label, stats){
-  const pct = stats.dinhMuc>0 ? Math.min(100, Math.round(stats.daXuat/stats.dinhMuc*100)) : (stats.daXuat>0?100:0);
-  return `
-    <div class="stat-block ${kind}">
-      <div class="sb-head"><span>${label}</span><span class="mono">${pct}%</span></div>
-      <div class="sb-body">
-        <div class="sb-row"><span class="k">Tồn đầu kỳ</span><span class="v">${fmtVND(stats.tonDauKy)}</span></div>
-        <div class="sb-row"><span class="k">Định mức phát sinh</span><span class="v">${fmtVND(stats.dinhMuc)}</span></div>
-        <div class="sb-row"><span class="k">Đã xuất</span><span class="v">${fmtVND(stats.daXuat)}</span></div>
-        <div class="sb-row"><span class="k">Tồn cuối kỳ</span><span class="v">${fmtVND(stats.tonCuoiKy)}</span></div>
-        <div class="sb-row"><span class="k">Vượt định mức</span><span class="v ${stats.vuot>0?'warn':''}">${fmtVND(stats.vuot)}</span></div>
-        <div class="progress-wrap">
-          <div class="progress-lbl"><span>Tỷ lệ đã dùng</span><span>${pct}%</span></div>
-          <div class="progress-bar"><div style="width:${pct}%"></div></div>
-        </div>
-      </div>
-    </div>`;
-}
-
-/** Dòng "Tổng tiền cấp mẫu" (cột P trong REPORT V2.) — hạn mức tổng chung cho khách hàng, không tách MEN/ĐÁ */
-function capMauLine(rep){
-  if(!rep || rep.tongTienCapMau === undefined) return "";
-  return `<div class="cap-mau-line">
-    <span>Tổng tiền cấp mẫu</span>
-    <b>${fmtVND(rep.tongTienCapMau)}</b>
-  </div>`;
-}
-
-/** Tổng hợp MEN+ĐÁ cộng lại — MEN vượt nhưng ĐÁ dư bù qua thì vẫn coi là chưa vượt tổng */
-function combinedSummaryLine(rep){
-  if(!rep || !rep.men || !rep.da) return "";
-  const tongDung = (rep.men.tongDung||0) + (rep.da.tongDung||0);
-  const daXuat = (rep.men.daXuat||0) + (rep.da.daXuat||0);
+/** Các con số dùng chung cho khối hạn mức của 1 khách */
+function statCalc(rep){
+  const m = rep.men, d = rep.da;
+  const sum = k => (m[k] || 0) + (d[k] || 0);
+  const tongDung = sum("tongDung"), daXuat = sum("daXuat");
   const hasSheetVsb = rep.vuotSauBu !== null && rep.vuotSauBu !== undefined;
   const vuotTong = hasSheetVsb ? Math.max(rep.vuotSauBu, 0) : Math.max(daXuat - tongDung, 0); // ưu tiên số "Vượt sau bù" của sheet
-  const conLai = tongDung - daXuat;
-  const pct = tongDung > 0 ? Math.round(daXuat/tongDung*100) : (daXuat>0 ? 100 : 0);
-  const over = vuotTong > 0;
-  const status = rep.trangThai ? ` · ${escapeHtml(rep.trangThai)}` : "";
-  return `<div class="combined-line ${over ? 'over' : ''}">
-    <div class="combined-head">
-      <span>Tổng cộng MEN + ĐÁ ${over ? '— ĐANG VƯỢT TỔNG' : '(chưa vượt)'}${status}</span>
-      <span class="mono">${pct}%</span>
-    </div>
-    <div class="combined-row"><span>Tổng được dùng</span><b>${fmtVND(tongDung)}</b></div>
-    <div class="combined-row"><span>Tổng đã xuất</span><b>${fmtVND(daXuat)}</b></div>
-    <div class="combined-row"><span>${over ? 'Vượt tổng định mức' : 'Còn lại (tổng)'}</span><b class="${over?'warn-text':''}">${fmtVND(over ? vuotTong : conLai)}</b></div>
+  const hasCap = rep.tongTienCapMau !== undefined && rep.tongTienCapMau !== null;
+  const conTong = hasCap ? rep.tongTienCapMau : (tongDung - daXuat); // "Còn lại" của tổng = Tổng tiền cấp mẫu (cột P)
+  return { m, d, sum, tongDung, daXuat, vuotTong, over: vuotTong > 0, conTong };
+}
+
+/** 1 thanh tiến độ: được dùng / đã xuất / còn lại (hoặc vượt) */
+function meterHtml(kind, title, o){
+  const pct = o.dung > 0 ? Math.round(o.xuat / o.dung * 100) : (o.xuat > 0 ? 100 : 0);
+  const over = o.vuot > 0;
+  const showVal = over ? o.vuot : o.con;
+  const noteHtml = o.note ? `<div class="meter-note ${o.noteWarn ? "warn" : ""}">${o.note}</div>` : "";
+  return `<div class="meter ${kind}${over ? " is-over" : ""}">
+    <div class="meter-head"><span class="meter-title">${title}</span><span class="meter-pct">${pct}% đã dùng</span></div>
+    <div class="meter-bar"><div style="width:${Math.min(100, pct)}%"></div></div>
+    <div class="meter-nums">
+      <div><span class="k">Được dùng</span><b>${fmtVND(o.dung)}</b></div>
+      <div class="key"><span class="k">Đã xuất</span><b>${fmtVND(o.xuat)}</b></div>
+      <div><span class="k">${over ? (o.labelVuot || "Vượt") : "Còn lại"}</span><b class="${over || showVal < 0 ? "neg" : ""}">${fmtVND(showVal)}</b></div>
+    </div>${noteHtml}
   </div>`;
+}
+
+/** Bảng chi tiết đầy đủ (tồn đầu kỳ, định mức phát sinh…) — thu gọn trong mục bấm để mở */
+function statTableHtml(rep){
+  const { m, d, sum, tongDung, daXuat, vuotTong } = statCalc(rep);
+  const cell = (v, cls) => `<td class="${cls || ""}${v < 0 ? " neg" : ""}">${fmtVND(v)}</td>`;
+  const row = (label, mv, dv, tv, rowCls) =>
+    `<tr class="${rowCls || ""}"><th>${label}</th>${cell(mv, "c-men")}${cell(dv, "c-da")}${cell(tv, "c-tot")}</tr>`;
+  const vuotCell = (v, cls) => `<td class="${cls}${v > 0 ? " neg" : ""}">${fmtVND(v)}</td>`;
+  return `<div class="stat-table-wrap">
+    <table class="stat-table">
+      <thead><tr><th></th><th class="h-men">MEN</th><th class="h-da">ĐÁ</th><th class="h-tot">TỔNG MEN + ĐÁ</th></tr></thead>
+      <tbody>
+        ${row("Tồn đầu kỳ", m.tonDauKy || 0, d.tonDauKy || 0, sum("tonDauKy"))}
+        ${row("Định mức phát sinh", m.dinhMuc || 0, d.dinhMuc || 0, sum("dinhMuc"))}
+        ${row("Tổng được dùng", m.tongDung || 0, d.tongDung || 0, tongDung)}
+        ${row("Đã xuất", m.daXuat || 0, d.daXuat || 0, daXuat, "row-key")}
+        ${row("Tồn cuối kỳ", m.tonCuoiKy || 0, d.tonCuoiKy || 0, sum("tonCuoiKy"))}
+        <tr><th>Vượt định mức <span class="th-sub">(tổng: sau bù)</span></th>${vuotCell(m.vuot || 0, "c-men")}${vuotCell(d.vuot || 0, "c-da")}${vuotCell(vuotTong, "c-tot")}</tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+/** Vùng hạn mức của 1 khách: kết luận → 3 thanh MEN | ĐÁ | TỔNG → bảng chi tiết (thu gọn) */
+function statAreaHtml(rep, target){
+  const c = statCalc(rep);
+  const m = rep.men, d = rep.da;
+  const label = (!target || target === "Tất cả") ? "tất cả các tháng" : "tháng " + target;
+  const status = rep.trangThai ? ` · ${escapeHtml(rep.trangThai)}` : "";
+  const offsets = [];
+  if(m.vuot > 0) offsets.push(`MEN vượt ${fmtVND(m.vuot)}`);
+  if(d.vuot > 0) offsets.push(`ĐÁ vượt ${fmtVND(d.vuot)}`);
+  const banner = c.over
+    ? `<div class="stat-banner over">⚠ ĐANG VƯỢT TỔNG ĐỊNH MỨC ${fmtVND(c.vuotTong)}${status}</div>`
+    : `<div class="stat-banner ok">✓ Chưa vượt tổng${status}${offsets.length ? ` <span class="sub">— ${offsets.join(", ")} nhưng đã được bên còn lại bù</span>` : ""}</div>`;
+
+  return `${banner}
+  <div class="meters-title">Hạn mức ${label}: đã xuất bao nhiêu, còn bao nhiêu
+    <span class="hint">Được dùng = Tồn đầu kỳ + Định mức phát sinh</span></div>
+  <div class="meters">
+    ${meterHtml("men", "MEN", { dung: m.tongDung || 0, xuat: m.daXuat || 0, con: m.tonCuoiKy || 0, vuot: m.vuot || 0 })}
+    ${meterHtml("da", "ĐÁ", { dung: d.tongDung || 0, xuat: d.daXuat || 0, con: d.tonCuoiKy || 0, vuot: d.vuot || 0 })}
+    ${meterHtml("tot", "TỔNG MEN + ĐÁ", {
+      dung: c.tongDung, xuat: c.daXuat, con: c.conTong, vuot: c.vuotTong, labelVuot: "Vượt sau bù",
+      note: c.over ? "" : "Còn lại = Tổng tiền cấp mẫu", noteWarn: false })}
+  </div>
+  <details class="stat-details">
+    <summary>Xem chi tiết: tồn đầu kỳ, định mức phát sinh, tồn cuối kỳ…</summary>
+    ${statTableHtml(rep)}
+  </details>`;
 }
 
 function escapeHtml(s){
@@ -896,6 +1025,18 @@ function entriesFor(name, q){
   let entries = customers[name].entries.filter(e => matchesSearch(name, {entries:[e]}, q) || !q);
   if(activeMonth) entries = entries.filter(e=>e.mk===activeMonth);
   return entries;
+}
+
+/** Các ô tiền theo cột MEN | ĐÁ (| Khác nếu có phiếu chưa phân loại được vào MEN/ĐÁ) */
+function amtColsHtml(vals, hasOther){
+  const cols = hasOther ? ["men","da","other"] : ["men","da"];
+  return `<div class="amt-cols">${cols.map(k => {
+    const v = vals[k] || 0;
+    return v ? `<span class="ac val ${k}">${fmtVND(v)}</span>` : `<span class="ac ${k}">–</span>`;
+  }).join("")}</div>`;
+}
+function amtOf(e){ // phiếu thuộc cột nào
+  return e.loai === "men" ? { men: e.tien } : e.loai === "da" ? { da: e.tien } : { other: e.tien };
 }
 
 function renderDetail(name){
@@ -917,23 +1058,25 @@ function renderDetail(name){
   });
 
   let historyHtml = "";
+  const hasOther = filteredEntries.some(e => !e.loai);
   if(groupKeys.length===0){
     historyHtml = `<div class="hist-empty">Không có lịch sử xuất phù hợp.</div>`;
   }else{
+    historyHtml += `<div class="hist-cols"><span class="hc-label">PHIẾU XUẤT</span>
+      <div class="amt-cols"><span class="men">MEN</span><span class="da">ĐÁ</span>${hasOther ? '<span class="other">KHÁC</span>' : ''}</div></div>`;
     groupKeys.forEach(mk=>{
       const items = groups[mk];
       const sub = items.reduce((s,e)=>s+e.tien,0);
       const subMen = items.filter(e=>e.loai==="men").reduce((s,e)=>s+e.tien,0);
       const subDa = items.filter(e=>e.loai==="da").reduce((s,e)=>s+e.tien,0);
+      const subOther = items.filter(e=>!e.loai).reduce((s,e)=>s+e.tien,0);
       historyHtml += `<div class="month-group">
         <div class="mg-head">
-          <span>Tháng ${mk}</span>
-          <span style="text-align:right;">
-            <b>${fmtVND(sub)}</b>
-            <div style="font-size:10.5px;color:var(--text-faint);font-weight:400;margin-top:2px;">
-              <span style="color:var(--men);">MEN ${fmtVND(subMen)}</span> · <span style="color:var(--da);">ĐÁ ${fmtVND(subDa)}</span>
-            </div>
-          </span>
+          <span>Tháng ${mk}<div class="mg-note" data-mgnote="${mk}">⏳ Đang đối chiếu định mức…</div></span>
+          <div class="mg-right">
+            ${amtColsHtml({men: subMen, da: subDa, other: subOther}, hasOther)}
+            <div class="mg-total">Tổng tháng <b>${fmtVND(sub)}</b></div>
+          </div>
         </div>
         ${items.map(e=>`
           <div class="hist-item">
@@ -946,12 +1089,23 @@ function renderDetail(name){
                 ${e.kho?`<span class="tag">${escapeHtml(e.kho)}</span>`:""}
                 ${e.trangThai?`<span class="tag">${escapeHtml(e.trangThai)}</span>`:""}
               </div>
+              <div class="run-line" data-run="${e.id}"></div>
             </div>
-            <div class="right"><div class="amt">${fmtVND(e.tien)}</div></div>
+            ${amtColsHtml(amtOf(e), hasOther)}
           </div>
         `).join("")}
       </div>`;
     });
+    const gMen = filteredEntries.filter(e=>e.loai==="men").reduce((s,e)=>s+e.tien,0);
+    const gDa = filteredEntries.filter(e=>e.loai==="da").reduce((s,e)=>s+e.tien,0);
+    const gOther = filteredEntries.filter(e=>!e.loai).reduce((s,e)=>s+e.tien,0);
+    historyHtml += `<div class="hist-foot">
+      <span>TỔNG CỘNG · ${filteredEntries.length} bản ghi</span>
+      <div class="mg-right">
+        ${amtColsHtml({men: gMen, da: gDa, other: gOther}, hasOther)}
+        <div class="mg-total">Tổng <b>${fmtVND(gMen + gDa + gOther)}</b></div>
+      </div>
+    </div>`;
   }
 
   // Khi không lọc theo tháng cụ thể ("Tất cả các tháng"): nếu có Apps Script, luôn yêu cầu đúng
@@ -984,7 +1138,7 @@ function renderDetail(name){
       <div id="statArea">${statAreaHtml}</div>
     </div>
 
-    <div class="card">
+    <div class="card" style="--ncols:${hasOther ? 3 : 2}">
       <div class="hist-head">
         <h3>Lịch sử xuất hàng</h3>
         <span class="n">${filteredEntries.length} bản ghi${activeMonth ? " · tháng " + activeMonth : ""}</span>
@@ -994,6 +1148,96 @@ function renderDetail(name){
   `;
 
   if(APPS_SCRIPT_URL) refreshStatArea(name, targetMonth);
+  annotateOverage(name, groupKeys); // đánh dấu phiếu làm vượt định mức theo từng tháng (chạy nền)
+}
+
+/* ============================================================
+   TÌM PHIẾU LÀM VƯỢT ĐỊNH MỨC
+   Trong từng tháng: cộng dồn các phiếu theo thứ tự thời gian (cùng ngày thì theo mã đơn),
+   so với "Tổng được dùng" của tháng đó (MEN + ĐÁ cộng gộp, lấy từ REPORT V2).
+   Phiếu đầu tiên làm luỹ kế vượt quá mức được dùng là "phiếu làm vượt".
+   ============================================================ */
+function entryOrder(a, b){
+  const na = parseInt((a.maDonHang||"").replace(/\D/g,""), 10) || 0;
+  const nb = parseInt((b.maDonHang||"").replace(/\D/g,""), 10) || 0;
+  return (a.ngay - b.ngay) || (na - nb);
+}
+
+function computeOverage(entries, rep){
+  const items = entries.slice().sort(entryOrder);
+  const budget = (rep.men.tongDung || 0) + (rep.da.tongDung || 0);
+  const sheetTotal = (rep.men.daXuat || 0) + (rep.da.daXuat || 0);
+  let cum = 0, crossed = null;
+  const states = {};
+  items.forEach(e => {
+    cum += e.tien;
+    let state = "ok";
+    if(crossed) state = "over";
+    else if(e.tien > 0 && cum > budget){ crossed = e; state = "cross"; }
+    states[e.id] = { state, cum };
+  });
+  return { states, budget, total: cum, sheetTotal, crossed };
+}
+
+function applyOverageToDOM(name, mk, rep){
+  const c = customers[name];
+  if(!c) return;
+  const monthEntries = c.entries.filter(e => e.mk === mk);
+  const r = computeOverage(monthEntries, rep);
+  monthEntries.forEach(e => {
+    const el = document.querySelector(`[data-run="${e.id}"]`);
+    if(!el) return;
+    const st = r.states[e.id];
+    if(st.state === "cross"){
+      el.className = "run-line run-cross";
+      el.textContent = `⚠ Phiếu này làm vượt định mức: luỹ kế ${fmtVND(st.cum)} > được dùng ${fmtVND(r.budget)} → vượt ${fmtVND(st.cum - r.budget)}`;
+    }else if(st.state === "over"){
+      el.className = "run-line run-over";
+      el.textContent = `Đã vượt từ phiếu ${r.crossed.maDonHang} · luỹ kế ${fmtVND(st.cum)} (vượt ${fmtVND(st.cum - r.budget)})`;
+    }else{
+      el.className = "run-line";
+      el.textContent = `Luỹ kế tháng: ${fmtVND(st.cum)} / được dùng ${fmtVND(r.budget)} · còn ${fmtVND(r.budget - st.cum)}`;
+    }
+  });
+  const note = document.querySelector(`[data-mgnote="${mk}"]`);
+  if(!note) return;
+  let html;
+  if(r.crossed){
+    note.className = "mg-note mg-note-warn";
+    html = `Vượt từ phiếu ${escapeHtml(r.crossed.maDonHang)} (${fmtDate(r.crossed.ngay)}) · tổng vượt ${fmtVND(r.total - r.budget)} · MEN+ĐÁ cộng gộp`;
+  }else{
+    note.className = "mg-note mg-note-ok";
+    html = `Chưa vượt · được dùng ${fmtVND(r.budget)}, đã xuất ${fmtVND(r.total)} · MEN+ĐÁ cộng gộp`;
+  }
+  if(Math.abs(r.total - r.sheetTotal) > 1){
+    html += `<br>Lưu ý: tổng phiếu trong app ${fmtVND(r.total)} khác "Đã xuất" trong sheet ${fmtVND(r.sheetTotal)}, điểm vượt có thể lệch`;
+  }
+  note.innerHTML = html;
+}
+
+async function annotateOverage(name, months){
+  for(const mk of months){
+    if(selectedCustomer !== name) return;
+    if(!document.querySelector(`[data-mgnote="${mk}"]`)) continue;
+    let repData = null;
+    try{
+      const cached = reportCache[normalizeMonth(mk)];
+      repData = cached || (APPS_SCRIPT_URL ? await getReportForMonth(mk) : null);
+    }catch(err){
+      console.warn("Không lấy được định mức tháng " + mk, err);
+    }
+    if(selectedCustomer !== name) return;
+    const note = document.querySelector(`[data-mgnote="${mk}"]`);
+    if(!note) continue;
+    const rep = repData ? repLookup(repData.map, name) : null;
+    if(!rep){
+      note.className = "mg-note";
+      note.textContent = repData ? "Không có định mức của khách này trong tháng này (REPORT V2)"
+        : (APPS_SCRIPT_URL ? "Không lấy được định mức tháng này để đối chiếu" : "Cần cấu hình Apps Script để đối chiếu tháng này");
+      continue;
+    }
+    applyOverageToDOM(name, mk, rep);
+  }
 }
 
 /** Hiển thị khi KHÔNG có Apps Script cấu hình: chỉ đúng cho tháng sẵn có trên sheet */
@@ -1007,7 +1251,7 @@ function renderStatFallbackHtml(rep){
     </div>`;
   }
   if(rep){
-    return `${capMauLine(rep)}${combinedSummaryLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`;
+    return statAreaHtml(rep, normalizeMonth(reportMeta.month));
   }
   return `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(reportMeta.month||"hiện tại")}.</div>`;
 }
@@ -1037,7 +1281,7 @@ async function refreshStatArea(name, targetMonth){
   }
   const rep = repLookup(repData.map, name);
   statEl.innerHTML = rep
-    ? `${capMauLine(rep)}${combinedSummaryLine(rep)}<div class="stat-grid">${statBlock("men","MEN",rep.men)}${statBlock("da","ĐÁ",rep.da)}</div>`
+    ? statAreaHtml(rep, targetMonth)
     : `<div class="no-report">Khách hàng này chưa có trong báo cáo REPORT V2. của tháng ${escapeHtml(targetMonth)}.</div>`;
   renderCustomerList(); // để hiện "Tổng tiền cấp mẫu" cho cả danh sách ngay khi cache có dữ liệu tháng này
 }
