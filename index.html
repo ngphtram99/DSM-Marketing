@@ -101,6 +101,8 @@
   .cust-item .name{font-size:14px;font-weight:600;}
   .cust-item .meta{font-size:12px;color:var(--text-faint);display:flex;justify-content:space-between;}
   .cust-item .meta .amt{color:var(--text-dim);font-family:'IBM Plex Mono',monospace;}
+  .cust-item .meta .amt.ok{color:var(--good);}
+  .cust-item .meta .amt.neg{color:var(--warn);font-weight:700;}
   .cust-item-sub{font-size:11px;color:var(--text-faint);margin-top:2px;text-align:right;}
   .empty-note{padding:28px 16px;color:var(--text-faint);font-size:13px;text-align:center;line-height:1.6;}
 
@@ -155,7 +157,9 @@
   .combined-row b.warn-text{color:var(--warn);}
 
   /* ---------- bảng so sánh MEN | ĐÁ | TỔNG ---------- */
-  .stat-banner{margin:12px 18px 0;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:700;border:1px solid var(--border);}
+  .stat-banner{margin:12px 18px 0;padding:11px 14px;border-radius:10px;font-size:13px;border:1px solid var(--border);}
+  .stat-banner .sb-title{font-weight:800;font-size:13.5px;}
+  .stat-banner .sb-text{font-weight:400;font-size:12.5px;color:var(--text-dim);margin-top:4px;line-height:1.55;}
   .stat-banner.ok{color:var(--good);background:rgba(95,180,136,.08);border-color:rgba(95,180,136,.3);}
   .stat-banner.over{color:var(--warn);background:rgba(217,99,74,.1);border-color:rgba(217,99,74,.5);}
   .stat-banner .sub{font-weight:400;color:var(--text-dim);font-size:12px;}
@@ -300,6 +304,10 @@
     .lt-dung b{font-size:13.5px;}
     .lt-last b{font-size:20px;}
   }
+  .op{display:inline-block;min-width:15px;height:15px;line-height:15px;border-radius:50%;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);font-size:11px;font-weight:700;text-align:center;margin-right:5px;letter-spacing:0;}
+  .howto-list{margin:0;padding:12px 18px 14px 34px;font-size:12.5px;line-height:1.7;color:var(--text-dim);}
+  .howto-list li{margin-bottom:6px;}
+  .howto-list b{color:var(--text);}
   .stat-details{margin:14px 18px 18px;border:1px solid var(--border);border-radius:10px;}
   .stat-details summary{cursor:pointer;padding:10px 14px;font-size:12.5px;color:var(--text-dim);}
   .stat-details summary:hover{color:var(--text);}
@@ -981,12 +989,15 @@ function renderCustomerList(){
     const capMau = capMauFor(name);
     const item = document.createElement("div");
     item.className = "cust-item" + (name===selectedCustomer ? " active" : "");
+    const capHtml = capMau === null ? "" : (capMau < 0
+      ? `<span class="amt neg">vượt ${fmtVND(-capMau)}</span>`
+      : `<span class="amt ok">còn lại ${fmtVND(capMau)}</span>`);
     item.innerHTML = capMau !== null
       ? `<div class="name">${escapeHtml(name)}</div>
-         <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">${fmtVND(capMau)}</span></div>
+         <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span>${capHtml}</div>
          <div class="cust-item-sub">Đã xuất: ${fmtVND(amountFor(c))}</div>`
       : `<div class="name">${escapeHtml(name)}</div>
-         <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">${fmtVND(amountFor(c))}</span></div>`;
+         <div class="meta"><span>${escapeHtml(c.khuVucChinh)}</span><span class="amt">đã xuất ${fmtVND(amountFor(c))}</span></div>`;
     item.onclick = ()=>{ selectedCustomer = name; renderCustomerList(); renderDetail(name); };
     listEl.appendChild(item);
   });
@@ -1056,18 +1067,38 @@ function statAreaHtml(rep, target){
   const m = rep.men, d = rep.da;
   const label = (!target || target === "Tất cả") ? "tất cả các tháng" : "tháng " + target;
   const status = rep.trangThai ? ` · ${escapeHtml(rep.trangThai)}` : "";
+  const isAll = !target || target === "Tất cả";
   const offsets = [];
   if(m.vuot > 0) offsets.push(`MEN vượt ${fmtVND(m.vuot)}`);
   if(d.vuot > 0) offsets.push(`ĐÁ vượt ${fmtVND(d.vuot)}`);
-  const banner = c.over
-    ? `<div class="stat-banner over">⚠ ĐANG VƯỢT TỔNG ĐỊNH MỨC ${fmtVND(c.vuotTong)}${status}</div>`
-    : `<div class="stat-banner ok">✓ Chưa vượt tổng${status}${offsets.length ? ` <span class="sub">— ${offsets.join(", ")} nhưng đã được bên còn lại bù</span>` : ""}</div>`;
+
+  // Kết luận bằng chữ thường, ai đọc cũng hiểu
+  let banner;
+  if(c.over){
+    banner = `<div class="stat-banner over">
+      <div class="sb-title">⚠ ĐANG VƯỢT ĐỊNH MỨC ${fmtVND(c.vuotTong)} — cần xử lý${status}</div>
+      <div class="sb-text">MEN và ĐÁ đã bù cho nhau nhưng tổng đã xuất vẫn nhiều hơn tổng tiền cấp mẫu ${fmtVND(c.vuotTong)}. Xem "Lịch sử xuất hàng" bên dưới để tìm phiếu làm vượt.</div>
+    </div>`;
+  }else{
+    const bu = offsets.length ? `${offsets.join(" và ")} nhưng bên còn lại còn dư để bù, nên không tính là vượt. ` : "";
+    const conLai = c.conTong > 0 ? `Khách còn được xuất thêm tối đa ${fmtVND(c.conTong)} (${label}).` : "Khách đã dùng hết hạn mức, chưa vượt.";
+    banner = `<div class="stat-banner ok">
+      <div class="sb-title">✓ CHƯA VƯỢT — tổng còn lại ${fmtVND(c.conTong)}${status}</div>
+      <div class="sb-text">${bu}${conLai}</div>
+    </div>`;
+  }
 
   return `${banner}
-  <div class="meters-title">Hạn mức ${label}: đã xuất bao nhiêu, còn bao nhiêu
-    <span class="hint">Tổng tiền cấp mẫu = Tồn đầu kỳ (phần còn lại của tháng trước) + Định mức phát sinh của tháng</span></div>
+  <div class="meters-title">Hạn mức ${label}
+    <span class="hint">Cách đọc: Tồn đầu kỳ + Định mức phát sinh = Tổng tiền cấp mẫu · Tổng tiền cấp mẫu − Đã xuất = Còn lại (âm = vượt)</span></div>
   <div class="limit-table">
-    <div class="lt-row lt-head"><div></div><div class="lt-num">TỒN ĐẦU KỲ<span class="lt-hsub">còn lại tháng trước</span></div><div class="lt-num">ĐỊNH MỨC PHÁT SINH</div><div class="lt-num">TỔNG TIỀN CẤP MẪU<span class="lt-hsub">= tồn đầu + định mức</span></div><div class="lt-num">ĐÃ XUẤT</div><div class="lt-num lt-last">CÒN LẠI / VƯỢT</div></div>
+    <div class="lt-row lt-head"><div></div>
+      <div class="lt-num">TỒN ĐẦU KỲ<span class="lt-hsub">dư từ tháng trước</span></div>
+      <div class="lt-num"><span class="op">+</span>ĐỊNH MỨC PHÁT SINH<span class="lt-hsub">${isAll ? "cộng dồn các tháng" : "cấp mới của tháng"}</span></div>
+      <div class="lt-num"><span class="op">=</span>TỔNG TIỀN CẤP MẪU<span class="lt-hsub">được phép xuất</span></div>
+      <div class="lt-num"><span class="op">−</span>ĐÃ XUẤT<span class="lt-hsub">${isAll ? "cộng dồn các tháng" : "các phiếu trong tháng"}</span></div>
+      <div class="lt-num lt-last"><span class="op">=</span>CÒN LẠI / VƯỢT<span class="lt-hsub">số âm = vượt</span></div>
+    </div>
     ${limitRowHtml("men", "MEN", { dung: m.tongDung || 0, ton: m.tonDauKy || 0, dm: m.dinhMuc || 0, xuat: m.daXuat || 0, con: m.tonCuoiKy || 0, vuot: m.vuot || 0 })}
     ${limitRowHtml("da", "ĐÁ", { dung: d.tongDung || 0, ton: d.tonDauKy || 0, dm: d.dinhMuc || 0, xuat: d.daXuat || 0, con: d.tonCuoiKy || 0, vuot: d.vuot || 0 })}
     ${limitRowHtml("tot", "TỔNG", { dung: c.tongDung, ton: c.sum("tonDauKy"), dm: c.sum("dinhMuc"), xuat: c.daXuat, con: c.conTong, vuot: c.vuotTong, labelVuot: "vượt sau bù" })}
@@ -1075,6 +1106,17 @@ function statAreaHtml(rep, target){
   <details class="stat-details">
     <summary>Xem chi tiết: tồn đầu kỳ, định mức phát sinh, tồn cuối kỳ…</summary>
     ${statTableHtml(rep)}
+  </details>
+  <details class="stat-details howto">
+    <summary>ℹ Hướng dẫn đọc &amp; kiểm tra (dành cho người hỗ trợ)</summary>
+    <ul class="howto-list">
+      <li><b>Cách đọc bảng:</b> Tồn đầu kỳ (dư từ tháng trước) + Định mức phát sinh (cấp mới của tháng) = Tổng tiền cấp mẫu. Trừ đi Đã xuất = Còn lại.</li>
+      <li><b>Khi nào là vượt:</b> MEN và ĐÁ bù cho nhau. Chỉ coi là vượt khi dòng <b>TỔNG</b> báo "vượt sau bù". MEN hoặc ĐÁ vượt riêng lẻ mà dòng TỔNG vẫn còn thì không cần xử lý.</li>
+      <li><b>Mỗi tháng tính riêng, không truy thu:</b> tháng trước xuất vượt thì tháng sau vẫn được cấp định mức mới đầy đủ, tồn đầu kỳ chỉ lấy phần còn dư. Nếu thấy tồn đầu kỳ ra số âm thì báo người phụ trách sheet kiểm tra công thức.</li>
+      <li><b>Tìm phiếu làm vượt:</b> kéo xuống "Lịch sử xuất hàng", phiếu có khung đỏ "Phiếu này làm vượt định mức" là phiếu đầu tiên đẩy tổng đã xuất vượt mức. Phiếu cùng ngày được xếp theo mã đơn.</li>
+      <li><b>Nguồn số liệu:</b> định mức, tồn đầu kỳ, còn lại lấy từ sheet REPORT V2. Các phiếu lấy từ dữ liệu Odoo (ghi chú có chữ DSM, trạng thái Hoàn thành hoặc Kho đã xác nhận). Nếu dưới tháng có dòng "tổng phiếu trong app khác Đã xuất trong sheet" thì cần đối chiếu thủ công.</li>
+      <li><b>Xem tháng khác:</b> bấm chọn tháng ở hàng chip phía trên cùng.</li>
+    </ul>
   </details>`;
 }
 
