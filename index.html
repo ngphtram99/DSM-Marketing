@@ -211,7 +211,7 @@
   .meters-title .hint{display:block;font-weight:400;font-size:11.5px;color:var(--text-faint);margin-top:2px;}
   /* bảng hạn mức: mỗi hàng MEN / ĐÁ / TỔNG, các cột Được dùng | Đã xuất | Còn lại */
   .limit-table{margin:12px 18px 0;border:1px solid var(--border);border-radius:12px;overflow:hidden;container-type:inline-size;background:var(--panel);}
-  .lt-row{display:grid;grid-template-columns:minmax(120px,1.1fr) repeat(4,minmax(0,1fr));align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--border);}
+  .lt-row{display:grid;grid-template-columns:minmax(100px,.95fr) repeat(5,minmax(0,1fr));align-items:center;gap:8px;padding:12px 14px;border-top:1px solid var(--border);}
   .lt-row:first-child{border-top:none;}
   .lt-head{padding-top:9px;padding-bottom:9px;background:var(--panel-2);font-size:10.5px;letter-spacing:.07em;color:var(--text-faint);font-weight:700;}
   .lt-row.men{box-shadow:inset 3px 0 0 var(--men);}
@@ -231,52 +231,74 @@
   .lt-pct{display:block;font-size:11px;color:var(--text-faint);margin-top:4px;}
   .lt-row.is-over .lt-pct{color:var(--warn);font-weight:700;}
   .lt-num{text-align:right;min-width:0;}
-  .lt-num b{display:block;font-family:'IBM Plex Mono',monospace;font-size:14.5px;white-space:nowrap;color:var(--text);}
+  .lt-num b{display:block;font-family:'IBM Plex Mono',monospace;font-size:14px;white-space:nowrap;color:var(--text);}
   .lt-num small{display:block;font-size:10.5px;color:var(--text-faint);margin-top:2px;}
   .lt-num small.cap{display:none;}
-  .lt-ton b{color:var(--text-dim);}
+  .lt-ton b{color:var(--text-faint);font-size:13px;font-weight:500;}   /* tồn đầu kỳ: xám nhạt, chỉ cần nhìn thấy */
+  .lt-dm b{color:var(--text-dim);font-size:13.5px;font-weight:600;}
   .lt-hsub{display:block;font-size:9.5px;font-weight:400;letter-spacing:0;text-transform:none;margin-top:1px;}
   .lt-num b.neg, .lt-num small.neg{color:var(--warn);}
-  .lt-ton b.neg{color:var(--warn);}
-  .lt-dung b{font-size:18px;font-weight:700;}  /* ưu tiên số tiền được dùng: cột đầu tiên, to nhất */
+  .lt-ton b.neg, .lt-dm b.neg{color:var(--warn);}
+  .lt-dung b{font-size:14px;font-weight:600;color:var(--text-dim);}  /* tổng tiền cấp mẫu: chỉ để đối chiếu, không nổi bật */
+  .lt-head .lt-num{line-height:1.25;}
+  /* CÒN LẠI / VƯỢT = cột quyết định: to, đậm, có nền riêng (xanh khi còn, đỏ khi vượt) */
+  .lt-last{border-radius:8px;padding:7px 10px;}
+  .lt-row:not(.lt-head):not(.is-over) .lt-last{background:rgba(95,180,136,.09);}
+  .lt-row.is-over .lt-last{background:rgba(217,99,74,.14);}
+  .lt-last b{font-size:19px;font-weight:800;color:var(--good);}
+  .lt-last b.neg{color:var(--warn);}
+  .lt-last small{font-size:11px;font-weight:600;}
+  .lt-head .lt-last{color:var(--text);padding:0 10px;background:none;}
   .lt-head .lt-num{font-size:10.5px;}
   .lt-foot{margin:6px 20px 0;font-size:11.5px;color:var(--text-faint);}
-  /* khung hẹp: tên xuống dòng riêng, 4 số vẫn nằm cùng 1 hàng; rất hẹp (điện thoại): 2 hàng x 2 cột có chú thích */
-  @container (max-width: 560px){
-    .lt-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 8px;padding:10px 12px;}
+  /* khung hẹp: tên xuống dòng riêng, 5 số vẫn cùng 1 hàng; rất hẹp (điện thoại): số "còn lại / vượt" lên đầu, các số còn lại chia 2 cột có chú thích */
+  @container (max-width: 680px){
+    .lt-row{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 6px;padding:10px 10px;}
     .lt-name{grid-column:1 / -1;display:flex;align-items:center;gap:8px;}
     .lt-title{margin:0;}
     .lt-bar{flex:1;}
     .lt-pct{margin:0;white-space:nowrap;}
     .lt-head > :first-child{display:none;}
-    .lt-num b{font-size:12.5px;}
-    .lt-dung b{font-size:14.5px;}
+    .lt-num b{font-size:12px;}
+    .lt-ton b{font-size:11.5px;}
+    .lt-dung b{font-size:12px;}
+    .lt-last{padding:5px 6px;}
+    .lt-last b{font-size:14.5px;}
   }
-  @container (max-width: 420px){
+  @container (max-width: 470px){
     .lt-head{display:none;}
-    .lt-row{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .lt-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;}
     .lt-num{text-align:left;}
     .lt-num small.cap{display:block;}
+    .lt-last{order:-1;grid-column:1 / -1;padding:8px 12px;}
     .lt-num b{font-size:13.5px;}
-    .lt-dung b{font-size:16px;}
+    .lt-ton b{font-size:13px;}
+    .lt-dung b{font-size:13.5px;}
+    .lt-last b{font-size:20px;}
   }
-  @media (max-width:640px){
-    .lt-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 8px;padding:10px 12px;}
+  @media (max-width:700px){
+    .lt-row{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 6px;padding:10px 10px;}
     .lt-name{grid-column:1 / -1;display:flex;align-items:center;gap:8px;}
     .lt-title{margin:0;}
     .lt-bar{flex:1;}
     .lt-pct{margin:0;white-space:nowrap;}
     .lt-head > :first-child{display:none;}
-    .lt-num b{font-size:12.5px;}
-    .lt-dung b{font-size:14.5px;}
+    .lt-num b{font-size:12px;}
+    .lt-ton b{font-size:11.5px;}
+    .lt-dung b{font-size:12px;}
+    .lt-last{padding:5px 6px;}
+    .lt-last b{font-size:14.5px;}
   }
-  @media (max-width:440px){
+  @media (max-width:480px){
     .lt-head{display:none;}
-    .lt-row{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .lt-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;}
     .lt-num{text-align:left;}
     .lt-num small.cap{display:block;}
+    .lt-last{order:-1;grid-column:1 / -1;padding:8px 12px;}
     .lt-num b{font-size:13.5px;}
-    .lt-dung b{font-size:16px;}
+    .lt-ton b{font-size:13px;}
+    .lt-dung b{font-size:13.5px;}
+    .lt-last b{font-size:20px;}
   }
   .stat-details{margin:14px 18px 18px;border:1px solid var(--border);border-radius:10px;}
   .stat-details summary{cursor:pointer;padding:10px 14px;font-size:12.5px;color:var(--text-dim);}
@@ -998,10 +1020,11 @@ function limitRowHtml(kind, title, o){
       <div class="lt-bar"><div style="width:${Math.min(100, pct)}%"></div></div>
       <span class="lt-pct">${pct}% đã dùng</span>
     </div>
-    <div class="lt-num lt-dung"><b>${fmtVND(o.dung)}</b><small class="cap">được dùng</small></div>
     <div class="lt-num lt-ton"><b class="${o.ton < 0 ? "neg" : ""}">${fmtVND(o.ton)}</b><small class="cap">tồn đầu kỳ</small></div>
+    <div class="lt-num lt-dm"><b>${fmtVND(o.dm)}</b><small class="cap">định mức phát sinh</small></div>
+    <div class="lt-num lt-dung"><b>${fmtVND(o.dung)}</b><small class="cap">tổng tiền cấp mẫu</small></div>
     <div class="lt-num"><b>${fmtVND(o.xuat)}</b><small class="cap">đã xuất</small></div>
-    <div class="lt-num"><b class="${neg ? "neg" : ""}">${fmtVND(val)}</b><small class="${neg ? "neg" : ""}">${over ? (o.labelVuot || "vượt") : "còn lại"}</small></div>
+    <div class="lt-num lt-last"><b class="${neg ? "neg" : ""}">${fmtVND(val)}</b><small class="${neg ? "neg" : ""}">${over ? (o.labelVuot || "vượt") : "còn lại"}</small></div>
   </div>`;
 }
 
@@ -1018,7 +1041,7 @@ function statTableHtml(rep){
       <tbody>
         ${row("Tồn đầu kỳ", m.tonDauKy || 0, d.tonDauKy || 0, sum("tonDauKy"))}
         ${row("Định mức phát sinh", m.dinhMuc || 0, d.dinhMuc || 0, sum("dinhMuc"))}
-        ${row("Tổng được dùng", m.tongDung || 0, d.tongDung || 0, tongDung)}
+        ${row("Tổng tiền cấp mẫu", m.tongDung || 0, d.tongDung || 0, tongDung)}
         ${row("Đã xuất", m.daXuat || 0, d.daXuat || 0, daXuat, "row-key")}
         ${row("Tồn cuối kỳ", m.tonCuoiKy || 0, d.tonCuoiKy || 0, sum("tonCuoiKy"))}
         <tr><th>Vượt định mức <span class="th-sub">(tổng: sau bù)</span></th>${vuotCell(m.vuot || 0, "c-men")}${vuotCell(d.vuot || 0, "c-da")}${vuotCell(vuotTong, "c-tot")}</tr>
@@ -1042,14 +1065,13 @@ function statAreaHtml(rep, target){
 
   return `${banner}
   <div class="meters-title">Hạn mức ${label}: đã xuất bao nhiêu, còn bao nhiêu
-    <span class="hint">Được dùng = Tồn đầu kỳ (phần còn lại của tháng trước) + Định mức phát sinh của tháng</span></div>
+    <span class="hint">Tổng tiền cấp mẫu = Tồn đầu kỳ (phần còn lại của tháng trước) + Định mức phát sinh của tháng</span></div>
   <div class="limit-table">
-    <div class="lt-row lt-head"><div></div><div class="lt-num">ĐƯỢC DÙNG</div><div class="lt-num">TỒN ĐẦU KỲ<span class="lt-hsub">còn lại tháng trước</span></div><div class="lt-num">ĐÃ XUẤT</div><div class="lt-num">CÒN LẠI / VƯỢT</div></div>
-    ${limitRowHtml("men", "MEN", { dung: m.tongDung || 0, ton: m.tonDauKy || 0, xuat: m.daXuat || 0, con: m.tonCuoiKy || 0, vuot: m.vuot || 0 })}
-    ${limitRowHtml("da", "ĐÁ", { dung: d.tongDung || 0, ton: d.tonDauKy || 0, xuat: d.daXuat || 0, con: d.tonCuoiKy || 0, vuot: d.vuot || 0 })}
-    ${limitRowHtml("tot", "TỔNG", { dung: c.tongDung, ton: c.sum("tonDauKy"), xuat: c.daXuat, con: c.conTong, vuot: c.vuotTong, labelVuot: "vượt sau bù" })}
+    <div class="lt-row lt-head"><div></div><div class="lt-num">TỒN ĐẦU KỲ<span class="lt-hsub">còn lại tháng trước</span></div><div class="lt-num">ĐỊNH MỨC PHÁT SINH</div><div class="lt-num">TỔNG TIỀN CẤP MẪU<span class="lt-hsub">= tồn đầu + định mức</span></div><div class="lt-num">ĐÃ XUẤT</div><div class="lt-num lt-last">CÒN LẠI / VƯỢT</div></div>
+    ${limitRowHtml("men", "MEN", { dung: m.tongDung || 0, ton: m.tonDauKy || 0, dm: m.dinhMuc || 0, xuat: m.daXuat || 0, con: m.tonCuoiKy || 0, vuot: m.vuot || 0 })}
+    ${limitRowHtml("da", "ĐÁ", { dung: d.tongDung || 0, ton: d.tonDauKy || 0, dm: d.dinhMuc || 0, xuat: d.daXuat || 0, con: d.tonCuoiKy || 0, vuot: d.vuot || 0 })}
+    ${limitRowHtml("tot", "TỔNG", { dung: c.tongDung, ton: c.sum("tonDauKy"), dm: c.sum("dinhMuc"), xuat: c.daXuat, con: c.conTong, vuot: c.vuotTong, labelVuot: "vượt sau bù" })}
   </div>
-  ${c.over ? "" : `<div class="lt-foot">Còn lại của TỔNG = Tổng tiền cấp mẫu</div>`}
   <details class="stat-details">
     <summary>Xem chi tiết: tồn đầu kỳ, định mức phát sinh, tồn cuối kỳ…</summary>
     ${statTableHtml(rep)}
@@ -1235,13 +1257,13 @@ function applyOverageToDOM(name, mk, rep){
     const st = r.states[e.id];
     if(st.state === "cross"){
       el.className = "run-line run-cross";
-      el.textContent = `⚠ Phiếu này làm vượt định mức: luỹ kế ${fmtVND(st.cum)} > được dùng ${fmtVND(r.budget)} → vượt ${fmtVND(st.cum - r.budget)}`;
+      el.textContent = `⚠ Phiếu này làm vượt định mức: luỹ kế ${fmtVND(st.cum)} > tổng tiền cấp mẫu ${fmtVND(r.budget)} → vượt ${fmtVND(st.cum - r.budget)}`;
     }else if(st.state === "over"){
       el.className = "run-line run-over";
       el.textContent = `Đã vượt từ phiếu ${r.crossed.maDonHang} · luỹ kế ${fmtVND(st.cum)} (vượt ${fmtVND(st.cum - r.budget)})`;
     }else{
       el.className = "run-line";
-      el.textContent = `Luỹ kế tháng: ${fmtVND(st.cum)} / được dùng ${fmtVND(r.budget)} · còn ${fmtVND(r.budget - st.cum)}`;
+      el.textContent = `Luỹ kế tháng: ${fmtVND(st.cum)} / tổng tiền cấp mẫu ${fmtVND(r.budget)} · còn ${fmtVND(r.budget - st.cum)}`;
     }
   });
   const note = document.querySelector(`[data-mgnote="${mk}"]`);
@@ -1252,7 +1274,7 @@ function applyOverageToDOM(name, mk, rep){
     html = `Vượt từ phiếu ${escapeHtml(r.crossed.maDonHang)} (${fmtDate(r.crossed.ngay)}) · tổng vượt ${fmtVND(r.total - r.budget)} · MEN+ĐÁ cộng gộp`;
   }else{
     note.className = "mg-note mg-note-ok";
-    html = `Chưa vượt · được dùng ${fmtVND(r.budget)}, đã xuất ${fmtVND(r.total)} · MEN+ĐÁ cộng gộp`;
+    html = `Chưa vượt · tổng tiền cấp mẫu ${fmtVND(r.budget)}, đã xuất ${fmtVND(r.total)} · MEN+ĐÁ cộng gộp`;
   }
   if(Math.abs(r.total - r.sheetTotal) > 1){
     html += `<br>Lưu ý: tổng phiếu trong app ${fmtVND(r.total)} khác "Đã xuất" trong sheet ${fmtVND(r.sheetTotal)}, điểm vượt có thể lệch`;
