@@ -1607,7 +1607,7 @@ function xlCalcMonths(it){
   return out;
 }
 
-/** Đọc sheet định mức theo tháng → { tenChuẩn(chuẩn hoá): { "m/yyyy": tổng MEN+ĐÁ } } (null nếu không đọc được) */
+/** Đọc sheet định mức theo tháng → { tênChuẩn(chuẩn hoá): { "m/yyyy": {men, da} } } (null nếu không đọc được) */
 async function xlLoadDm(){
   try{
     const rows = await fetchSheetRows(DM_SHEET_NAME);
@@ -1617,8 +1617,8 @@ async function xlLoadDm(){
       if(!/^\d{1,2}\/\d{4}$/.test(mk)) continue;
       const name = normKey(txt(row, DMX.tenChuan) || txt(row, DMX.khachHang));
       if(!name) continue;
-      const v = num(row, DMX.men) + num(row, DMX.da);
-      (map[name] = map[name] || {})[mk] = ((map[name][mk]) || 0) + v;
+      const o = (map[name] = map[name] || {})[mk] = (map[name][mk] || { men:0, da:0 });
+      o.men += num(row, DMX.men); o.da += num(row, DMX.da);
     }
     return map;
   }catch(err){
@@ -1630,258 +1630,276 @@ function xlDmFor(dmMap, name, sheetMk){
   if(!dmMap) return null;
   for(const n of [name, reportAlias[name]]){
     const m = n && dmMap[normKey(n)];
-    if(m && m[sheetMk] !== undefined) return m[sheetMk];
+    if(m && m[sheetMk]) return m[sheetMk];
   }
   return null;
 }
 
 /**
- * Tiền cấp mẫu từng tháng của 1 khách (cũ → mới), cộng dồn phần chưa dùng sang tháng sau.
- * Ưu tiên số của REPORT V2; tháng nào REPORT V2 không có thì tính: tồn đầu kỳ (phần dư tháng trước, không âm)
- * + định mức dòng tháng trước đó của sheet "Định mức DSM_Update ngày 10 mỗi tháng".
+ * Tồn đầu kỳ + định mức MEN/ĐÁ từng tháng của 1 khách (cũ → mới).
+ * Ưu tiên số của REPORT V2; tháng nào REPORT V2 không có thì tính: tồn = còn lại MEN/ĐÁ tháng trước (tổng âm thì về 0)
+ * + định mức dòng tháng liền trước của sheet "Định mức DSM_Update ngày 10 mỗi tháng".
+ * Trả về { "m/yyyy": { ton:{men,da}, dm:{men,da}, computed } | null }
  */
 function xlMonthInfo(it, mkAsc, repByMonth, dmMap){
   const spent = {};
-  it.c.entries.forEach(e => { spent[e.mk] = (spent[e.mk] || 0) + e.tien; });
+  it.c.entries.forEach(e => { const s = spent[e.mk] = spent[e.mk] || { men:0, da:0 }; if(e.loai === "men") s.men += e.tien; else if(e.loai === "da") s.da += e.tien; });
   const out = {};
-  let prevRemain = null;
+  let prev = null;                                   // còn lại MEN / ĐÁ của tháng trước
   for(const mk of mkAsc){
     const rd = repByMonth[mk], rep = rd ? repLookup(rd.map, it.name) : null;
-    let cap = null, ton = null, dm = null, computed = false;
+    let inf = null;
     if(rep){
-      cap = (rep.men.tongDung || 0) + (rep.da.tongDung || 0);
-      ton = (rep.men.tonDauKy || 0) + (rep.da.tonDauKy || 0);
-      dm  = (rep.men.dinhMuc || 0) + (rep.da.dinhMuc || 0);
-    }else if(prevRemain !== null){
+      inf = { ton:{ men: rep.men.tonDauKy || 0, da: rep.da.tonDauKy || 0 }, dm:{ men: rep.men.dinhMuc || 0, da: rep.da.dinhMuc || 0 }, computed:false };
+    }else if(prev){
       const d = xlDmFor(dmMap, it.name, xlPrevMk(mk));
-      if(d !== null){ ton = Math.max(0, prevRemain); dm = d; cap = ton + dm; computed = true; }
+      if(d){ const neg = prev.men + prev.da < 0; inf = { ton: neg ? { men:0, da:0 } : { men:prev.men, da:prev.da }, dm:{ men:d.men, da:d.da }, computed:true }; }
     }
-    out[mk] = { cap, ton, dm, computed };
-    prevRemain = cap === null ? null : cap - (spent[mk] || 0);
+    out[mk] = inf;
+    const sp = spent[mk] || { men:0, da:0 };
+    prev = inf ? { men: inf.ton.men + inf.dm.men - sp.men, da: inf.ton.da + inf.dm.da - sp.da } : null;
   }
   return out;
 }
 
+/** Cấu trúc file = form theo dõi chuẩn: Tổng hợp khách hàng · Theo dõi theo tháng · Chi tiết phiếu xuất */
 async function buildDsmXlsx(names){
   const q = document.getElementById("searchInput").value.trim();
   const target = currentTargetMonth();
-  const items = names.map(n => ({ name: n, c: customers[n], entries: entriesFor(n, q).slice().sort(entryOrder) })); // cũ → mới
-
-  // Lấy định mức: 1 lần cho kỳ tổng hợp + 1 lần cho mỗi tháng có phiếu (Apps Script trả về tất cả khách nên không gọi lại theo từng khách)
-  const sumData = await xlRepDataFor(target === "Tất cả" && !APPS_SCRIPT_URL ? reportMeta.month : target);
-  const months = activeMonth ? [activeMonth] : Array.from(new Set(items.flatMap(it => xlCalcMonths(it))));   // gồm cả tháng không xuất hàng
-  const dmMap = await xlLoadDm();
+  const items = names.map(n => ({ name: n, c: customers[n], entries: entriesFor(n, q).slice().sort(entryOrder) }));
+  const months = activeMonth ? [activeMonth] : Array.from(new Set(items.flatMap(it => xlCalcMonths(it))));
   const repByMonth = {};
   for(const mk of months) repByMonth[mk] = await xlRepDataFor(mk);
+  const dmMap = await xlLoadDm();
+  const firstRep = Object.values(repByMonth).find(Boolean);
+  const updated = firstRep && firstRep.meta && firstRep.meta.updated;
 
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "Tra cứu Giá trị Cấp mẫu DSM";
-  const ws1 = wb.addWorksheet("Tổng hợp", { views:[{ showGridLines:false }] });
-  const DN = "Chi tiết phiếu xuất";
-  const ws2 = wb.addWorksheet(DN, { views:[{ state:"frozen", ySplit:4, showGridLines:false }] });
-  const multi = items.length > 1;
-  const infoOf = {};   // tên khách -> { "m/yyyy": {cap, ton, dm, computed} }
-  items.forEach(it => { infoOf[it.name] = xlMonthInfo(it, xlCalcMonths(it), repByMonth, dmMap); });
-  const showOf = it => { const all = xlCalcMonths(it); return activeMonth ? all.filter(m => m === activeMonth) : all; };
-  let anyComputed = false;
+  const ser = mk => { const [m, y] = mk.split("/").map(Number); return Date.UTC(y, m - 1, 1) / 86400000 + 25569; };
+  const mkDate = mk => { const [m, y] = mk.split("/").map(Number); return new Date(Date.UTC(y, m - 1, 1)); };
 
-  /* ---------------- Sheet 2: chi tiết phiếu xuất (danh sách phẳng, cũ → mới) ---------------- */
-  const o = multi ? 1 : 0;
-  const cN = 1+o, cT = 2+o, cD = 3+o, cL = 4+o, cM = 5+o, cK = 6+o, cS = 7+o, cMen = 8+o, cDa = 9+o, cOt = 10+o, cTo = 11+o, cG = 12+o, LAST = 12+o;
-  const L = c => colLetter(c - 1);
-  xlPut(ws2, 1, 1, names.length === 1 ? `CHI TIẾT CÁC PHIẾU XUẤT MẪU DSM — ${names[0].toUpperCase()}` : "CHI TIẾT CÁC PHIẾU XUẤT MẪU DSM", { size:14, bold:true, noBorder:true });
-  ws2.mergeCells(2, 1, 2, LAST);
-  xlPut(ws2, 2, 1, "Mỗi dòng là một phiếu xuất, xếp từ tháng cũ đến tháng mới; sau mỗi tháng có dòng 'Cộng tháng'. Tiền cấp mẫu và số còn lại của từng tháng xem ở sheet 'Tổng hợp'. Phiếu nào làm vượt tiền cấp mẫu của tháng sẽ tô đỏ.",
-        { size:9, italic:true, color:"FF595959", wrap:true, noBorder:true });
-  ws2.getRow(2).height = 30;
-  const hasOther = items.some(it => it.entries.some(e => !e.loai));
-  (multi ? ["Khách hàng"] : []).concat(["Ngày xuất","Tháng","Diễn giải","Loại","Mã đơn hàng","Kho","Trạng thái","MEN (VNĐ)","ĐÁ (VNĐ)","Khác (VNĐ)","Tổng (VNĐ)","Ghi chú"])
-    .forEach((h, i) => xlPut(ws2, 4, i + 1, h, { bold:true, color:"FFFFFFFF", fill:"FF1F3A5F", h:"center", wrap:true }));
-  ws2.getRow(4).height = 30;
-
-  const totalRowRef = {};          // "tên|m/yyyy" -> số dòng 'Cộng tháng' (để sheet Tổng hợp liên kết sang)
-  const monthTotRows = [], monthTotVals = [];
-  let r = 5, nEntries = 0;
-  for(const it of items){
-    const info = infoOf[it.name];
-    if(multi){
-      ws2.mergeCells(r, 1, r, LAST);
-      xlPut(ws2, r, 1, `${it.name}  ·  ${it.c.khuVucChinh || ""}`, { bold:true, color:"FFFFFFFF", fill:"FF3B5B85", size:11 });
-      ws2.getRow(r).height = 22; r++;
-    }
-    const byMk = {};
-    it.entries.forEach(e => { (byMk[e.mk] = byMk[e.mk] || []).push(e); });
-    for(const mk of showOf(it)){
-      const asc = byMk[mk];
-      if(!asc || !asc.length) continue;                 // tháng không xuất hàng: chỉ hiện ở sheet Tổng hợp
-      const cap = info[mk] ? info[mk].cap : null;
-      const first = r;
-      let cum = 0, crossed = null, sMen = 0, sDa = 0, sOt = 0;
-      asc.forEach(e => {
-        const rr = r++;
-        nEntries++;
-        cum += e.tien;
-        if(e.loai === "men") sMen += e.tien; else if(e.loai === "da") sDa += e.tien; else sOt += e.tien;
-        let st = "ok";
-        if(crossed) st = "over";
-        else if(cap !== null && e.tien > 0 && cum > cap){ crossed = e; st = "cross"; }
-        const rowFill = st === "cross" ? "FFFDE2E2" : st === "over" ? "FFFFF1F1" : undefined;
-        const note = st === "cross" ? `⚠ Phiếu làm vượt tiền cấp mẫu: luỹ kế ${fmtVND(cum)} > ${fmtVND(cap)}`
-                   : st === "over" ? `Đã vượt từ phiếu ${crossed.maDonHang} (luỹ kế ${fmtVND(cum)})` : "";
-        const dt = new Date(Date.UTC(e.ngay.getFullYear(), e.ngay.getMonth(), e.ngay.getDate()));
-        const f = { fill: rowFill };
-        if(multi) xlPut(ws2, rr, 1, it.name, f);
-        xlPut(ws2, rr, cN, dt, { ...f, fmt:"dd/mm/yyyy", h:"left" });
-        xlPut(ws2, rr, cT, mk, { ...f, h:"center" });
-        xlPut(ws2, rr, cD, e.ghiChu || e.maDonHang || "Xuất mẫu", { ...f, wrap:true });
-        xlPut(ws2, rr, cL, e.loai === "men" ? "MEN" : e.loai === "da" ? "ĐÁ" : "", { h:"center", fill: rowFill || (e.loai === "men" ? "FFFCE9D5" : e.loai === "da" ? "FFDCEAF2" : undefined) });
-        xlPut(ws2, rr, cM, e.maDonHang || "", f);
-        xlPut(ws2, rr, cK, e.kho || "", { ...f, wrap:true });
-        xlPut(ws2, rr, cS, e.trangThai || "", f);
-        xlPut(ws2, rr, cMen, e.loai === "men" ? e.tien : 0, { ...f, color:XL_BLUE, fmt:XL_NUM });
-        xlPut(ws2, rr, cDa,  e.loai === "da" ? e.tien : 0,  { ...f, color:XL_BLUE, fmt:XL_NUM });
-        xlPut(ws2, rr, cOt,  !e.loai ? e.tien : 0,          { ...f, color:XL_BLUE, fmt:XL_NUM });
-        xlPut(ws2, rr, cTo, xlF(`${L(cMen)}${rr}+${L(cDa)}${rr}+${L(cOt)}${rr}`, e.tien), { ...f, fmt:XL_NUM });
-        xlPut(ws2, rr, cG, note, { ...f, color:"FFC00000", bold: st === "cross", wrap:true });
-      });
-      const tr0 = r++, last = tr0 - 1, sTot = sMen + sDa + sOt;
-      const hs = { bold:true, fill:"FFE8EEF5" };
-      ws2.mergeCells(tr0, 1, tr0, cS);
-      xlPut(ws2, tr0, 1, `Cộng tháng ${mk} · ${asc.length} phiếu`, hs);
-      [[cMen, sMen], [cDa, sDa], [cOt, sOt]].forEach(([c, v]) => xlPut(ws2, tr0, c, xlF(`SUM(${L(c)}${first}:${L(c)}${last})`, v), { ...hs, fmt:XL_NUM }));
-      xlPut(ws2, tr0, cTo, xlF(`${L(cMen)}${tr0}+${L(cDa)}${tr0}+${L(cOt)}${tr0}`, sTot), { ...hs, fmt:XL_NUM });
-      const over = cap !== null && sTot > cap;
-      xlPut(ws2, tr0, cG, cap === null ? "" : (over ? `VƯỢT ${fmtVND(sTot - cap)} so với tiền cấp mẫu ${fmtVND(cap)}` : "Chưa vượt"), { ...hs, color: over ? "FFC00000" : "FF1E7B3A", wrap:true });
-      totalRowRef[`${it.name}|${mk}`] = tr0;
-      monthTotRows.push(tr0); monthTotVals.push({ men:sMen, da:sDa, oth:sOt });
-    }
-  }
-  const trow = r;
-  const tMen = monthTotVals.reduce((s,x) => s + x.men, 0), tDa = monthTotVals.reduce((s,x) => s + x.da, 0), tOth = monthTotVals.reduce((s,x) => s + x.oth, 0);
-  const sumRef = c => monthTotRows.length ? monthTotRows.map(h => L(c) + h).join("+") : "0";
-  const ts = { bold:true, fill:"FFD9E2EF" };
-  ws2.mergeCells(trow, 1, trow, cS);
-  xlPut(ws2, trow, 1, `TỔNG CỘNG · ${nEntries} phiếu`, ts);
-  xlPut(ws2, trow, cMen, xlF(sumRef(cMen), tMen), { ...ts, fmt:XL_NUM });
-  xlPut(ws2, trow, cDa,  xlF(sumRef(cDa), tDa),   { ...ts, fmt:XL_NUM });
-  xlPut(ws2, trow, cOt,  xlF(sumRef(cOt), tOth),  { ...ts, fmt:XL_NUM });
-  xlPut(ws2, trow, cTo,  xlF(`${L(cMen)}${trow}+${L(cDa)}${trow}+${L(cOt)}${trow}`, tMen + tDa + tOth), { ...ts, fmt:XL_NUM });
-  xlPut(ws2, trow, cG, null, ts);
-  [["Ghi chú:", true],
-   ["• Chữ xanh dương = số lấy từ hệ thống (số tiền từng phiếu); chữ đen = công thức tự tính.", false],
-   ["• Các phiếu lấy từ dữ liệu Odoo: ghi chú có chữ DSM, trạng thái Hoàn thành hoặc Kho đã xác nhận.", false],
-   ["• Phiếu tô đỏ = phiếu đầu tiên làm tổng xuất trong tháng vượt tiền cấp mẫu của tháng đó (MEN + ĐÁ cộng gộp, các phiếu cùng ngày xếp theo mã đơn).", false]]
-    .forEach((n, i) => xlPut(ws2, trow + 2 + i, 1, n[0], { size:9, bold:n[1], color:"FF595959", noBorder:true }));
-  (multi ? [24] : []).concat([12,10,34,8,14,22,14,15,15,13,15,46]).forEach((w, i) => { ws2.getColumn(i + 1).width = w; });
-  ws2.getColumn(cOt).hidden = !hasOther;
-
-  /* ---------------- Sheet 1: tổng hợp ---------------- */
-  const kyLabel = target === "Tất cả" ? "Tất cả các tháng" : "Tháng " + target;
-  xlPut(ws1, 1, 1, "BÁO CÁO GIÁ TRỊ CẤP MẪU DSM", { size:16, bold:true, noBorder:true });
-  const info = [
-    ["Phạm vi", names.length === 1 ? names[0] : `${names.length} khách hàng` + (activeRegion !== "Tất cả" ? " · " + activeRegion : "") + (q ? ` · tìm “${q}”` : "")],
-    ["Kỳ báo cáo", kyLabel],
-    ["Ngày xuất báo cáo", fmtDate(new Date())],
-    ["Số liệu định mức cập nhật", (sumData && sumData.meta && sumData.meta.updated) || "—"],
-    ["Số lần xuất (phiếu)", nEntries]
-  ];
-  let ir = 3;
-  info.forEach(([k, v]) => { xlPut(ws1, ir, 1, k, { bold:true, noBorder:true }); xlPut(ws1, ir, 2, v, { noBorder:true, h:"left" }); ir++; });
-
-  let sr = ir + 1;
-  let conclRow = null;
-  if(names.length === 1){ conclRow = sr; xlPut(ws1, sr, 1, "KẾT LUẬN", { bold:true, noBorder:true }); sr += 2; }
-  xlPut(ws1, sr, 1, "BẢNG TIỀN CẤP MẪU (VNĐ)", { size:11, bold:true, noBorder:true }); sr++;
-  const h1 = ["Khách hàng","Miền / Khu vực","Loại","Tồn đầu kỳ\n(dư từ tháng trước)", target === "Tất cả" ? "Định mức phát sinh\n(cộng dồn các tháng)" : "Định mức phát sinh\n(cấp mới của tháng)",
-              "Tổng tiền cấp mẫu\n(được phép xuất)", target === "Tất cả" ? "Đã xuất\n(cộng dồn các tháng)" : "Đã xuất\n(các phiếu trong tháng)", "Còn lại / Vượt\n(số âm = vượt)", "% đã dùng", "Kết luận"];
-  h1.forEach((h, i) => xlPut(ws1, sr, i + 1, h, { bold:true, color:"FFFFFFFF", fill:"FF1F3A5F", h:"center", wrap:true }));
-  ws1.getRow(sr).height = 44;
-  sr++;
-  let firstConclusion = "";
+  /* ---- tính số liệu từng khách theo đúng công thức của form (để ghi kèm kết quả và đối chiếu REPORT V2) ---- */
+  const cust = [];
   const missing = [];
   for(const it of items){
-    const rep = sumData ? repLookup(sumData.map, it.name) : null;
-    const m = rep ? rep.men : {}, d = rep ? rep.da : {};
-    if(!rep) missing.push(it.name);
-    const rowsDef = [["MEN", m, "FFFCE9D5"], ["ĐÁ", d, "FFDCEAF2"]];
-    const r0 = sr;
-    rowsDef.forEach(([lab, o, fill]) => {
-      const ton = o.tonDauKy || 0, dm = o.dinhMuc || 0, xuat = o.daXuat || 0;
-      xlPut(ws1, sr, 1, it.name); xlPut(ws1, sr, 2, it.c.khuVucChinh || "");
-      xlPut(ws1, sr, 3, lab, { bold:true, fill, h:"center" });
-      xlPut(ws1, sr, 4, ton,  { color:XL_BLUE, fmt:XL_NUM });
-      xlPut(ws1, sr, 5, dm,   { color:XL_BLUE, fmt:XL_NUM });
-      xlPut(ws1, sr, 6, xlF(`D${sr}+E${sr}`, ton + dm), { fmt:XL_NUM });
-      xlPut(ws1, sr, 7, xuat, { color:XL_BLUE, fmt:XL_NUM });
-      xlPut(ws1, sr, 8, xlF(`F${sr}-G${sr}`, ton + dm - xuat), { fmt:XL_NUM });
-      xlPut(ws1, sr, 9, xlF(`IF(F${sr}=0,0,G${sr}/F${sr})`, (ton + dm) === 0 ? 0 : xuat / (ton + dm)), { fmt:"0%" });
-      xlPut(ws1, sr, 10, null);
-      sr++;
+    if(!it.entries.length) continue;
+    const mkAll = xlCalcMonths(it);
+    const info = xlMonthInfo(it, mkAll, repByMonth, dmMap);
+    const listed = activeMonth ? mkAll.filter(m => m === activeMonth) : mkAll;
+    const spent = {};
+    it.entries.forEach(e => { const s = spent[e.mk] = spent[e.mk] || { men:0, da:0, oth:0 }; if(e.loai === "men") s.men += e.tien; else if(e.loai === "da") s.da += e.tien; else s.oth += e.tien; });
+    const rows = []; let prev = null, anyInfo = false;
+    listed.forEach((mk, i) => {
+      const inf = info[mk] || null;
+      if(inf) anyInfo = true;
+      const sp = spent[mk] || { men:0, da:0, oth:0 };
+      const dm = inf ? inf.dm : { men:0, da:0 };
+      const ton = i === 0 ? (inf ? inf.ton : { men:0, da:0 }) : (prev.tot < 0 ? { men:0, da:0 } : { men:prev.remMen, da:prev.remDa });
+      const allowMen = ton.men + dm.men, allowDa = ton.da + dm.da;
+      const remMen = allowMen - sp.men, remDa = allowDa - sp.da;
+      const notes = [];
+      if(!inf) notes.push("Chưa có định mức tháng này trong REPORT V2");
+      if(inf && inf.computed) notes.push("(*) tính từ sheet Định mức");
+      if(inf && !inf.computed && i > 0 && (Math.abs(ton.men - inf.ton.men) > 1 || Math.abs(ton.da - inf.ton.da) > 1))
+        notes.push(`Lệch REPORT V2: tồn MEN ${fmtVND(inf.ton.men)}, tồn ĐÁ ${fmtVND(inf.ton.da)}`);
+      if(sp.oth) notes.push(`Có phiếu không phân loại MEN/ĐÁ (${fmtVND(sp.oth)}) chưa tính vào bảng`);
+      prev = { mk, inf, sp, ton, dm, allowMen, allowDa, allow: allowMen + allowDa, xuat: sp.men + sp.da, remMen, remDa, tot: remMen + remDa, notes };
+      rows.push(prev);
     });
-    // dòng TỔNG
-    const sm = k => (m[k] || 0) + (d[k] || 0);
-    const ts2 = { bold:true, fill:"FFD9E2EF" };
-    xlPut(ws1, sr, 1, it.name, ts2); xlPut(ws1, sr, 2, it.c.khuVucChinh || "", ts2); xlPut(ws1, sr, 3, "TỔNG", { ...ts2, h:"center" });
-    [["D", 4, "tonDauKy"], ["E", 5, "dinhMuc"], ["G", 7, "daXuat"]].forEach(([col, ci, k]) => xlPut(ws1, sr, ci, xlF(`SUM(${col}${r0}:${col}${r0+1})`, sm(k)), { ...ts2, fmt:XL_NUM }));
-    xlPut(ws1, sr, 6, xlF(`SUM(F${r0}:F${r0+1})`, sm("tonDauKy") + sm("dinhMuc")), { ...ts2, fmt:XL_NUM });
-    const tongCap = sm("tonDauKy") + sm("dinhMuc"), tongXuat = sm("daXuat");
-    xlPut(ws1, sr, 8, xlF(`F${sr}-G${sr}`, tongCap - tongXuat), { ...ts2, fmt:XL_NUM });
-    xlPut(ws1, sr, 9, xlF(`IF(F${sr}=0,0,G${sr}/F${sr})`, tongCap === 0 ? 0 : tongXuat / tongCap), { ...ts2, fmt:"0%" });
-    let concl;
-    if(!rep) concl = "Không có định mức của khách này trong REPORT V2";
-    else { const sc = statCalc(rep); concl = sc.over ? `VƯỢT ĐỊNH MỨC ${fmtVND(sc.vuotTong)}` : `CHƯA VƯỢT — còn lại ${fmtVND(sc.conTong)}`; }
-    if(!firstConclusion) firstConclusion = concl;
-    xlPut(ws1, sr, 10, concl, { ...ts2, color: /^VƯỢT/.test(concl) ? "FFC00000" : "FF1E7B3A", wrap:true });
-    ws1.getRow(sr).height = 24;
-    sr++;
+    if(!anyInfo) missing.push(it.name);
+    cust.push({ it, rows, open: rows.length ? rows[0].ton : { men:0, da:0 } });
   }
-  if(conclRow){
-    const over = /^VƯỢT/.test(firstConclusion);
-    xlPut(ws1, conclRow, 2, firstConclusion + (over ? " — cần xử lý" : ""), { size:11, bold:true, color: over ? "FFC00000" : "FF1E7B3A", noBorder:true, h:"left" });
-  }
-  /* ---- Bảng tiền cấp mẫu theo từng tháng (cũ → mới): phần còn lại tháng này = tồn đầu kỳ tháng sau ---- */
-  sr++;
-  xlPut(ws1, sr, 1, "TIỀN CẤP MẪU THEO TỪNG THÁNG (VNĐ) — phần còn lại của tháng này chuyển thành tồn đầu kỳ của tháng sau", { size:11, bold:true, noBorder:true }); sr++;
-  ["Khách hàng","Tháng","Tồn đầu kỳ\n(dư từ tháng trước)","+ Định mức mới\ncủa tháng","= Được phép xuất","− Đã xuất\ntrong tháng","= Còn lại\n(chuyển sang tháng sau)","Ghi chú"]
-    .forEach((h, i) => xlPut(ws1, sr, i + 1, h, { bold:true, color:"FFFFFFFF", fill:"FF1F3A5F", h:"center", wrap:true }));
-  ws1.mergeCells(sr, 8, sr, 10);
-  ws1.getRow(sr).height = 44; sr++;
-  for(const it of items){
-    const mi = infoOf[it.name];
-    for(const mk of showOf(it)){
-      const inf = mi[mk] || { cap:null, ton:null, dm:null, computed:false };
-      const ref = totalRowRef[`${it.name}|${mk}`];
-      const xuat = it.entries.filter(e => e.mk === mk).reduce((s, e) => s + e.tien, 0);
-      const noShip = !ref;
-      const over = inf.cap !== null && xuat > inf.cap;
-      if(inf.computed) anyComputed = true;
-      const fill = noShip ? "FFFFF8E1" : undefined;
-      const noteBits = [];
-      if(noShip) noteBits.push("Không xuất hàng trong tháng");
-      if(over) noteBits.push(`VƯỢT ${fmtVND(xuat - inf.cap)}`);
-      if(inf.cap === null) noteBits.push("Chưa có định mức tháng này trong REPORT V2");
-      if(inf.computed) noteBits.push("(*) tính từ sheet Định mức");
-      xlPut(ws1, sr, 1, it.name, { fill });
-      xlPut(ws1, sr, 2, `Tháng ${mk}`, { fill, bold:true });
-      xlPut(ws1, sr, 3, inf.ton, { fill, color:XL_BLUE, fmt:XL_NUM });
-      xlPut(ws1, sr, 4, inf.dm,  { fill, color:XL_BLUE, fmt:XL_NUM });
-      xlPut(ws1, sr, 5, inf.cap === null ? null : xlF(`C${sr}+D${sr}`, inf.ton + inf.dm), { fill, fmt:XL_NUM });
-      xlPut(ws1, sr, 6, ref ? xlF(`'${DN}'!${L(cTo)}${ref}`, xuat) : 0, { fill, color: ref ? XL_GREEN : "FF000000", fmt:XL_NUM });
-      xlPut(ws1, sr, 7, inf.cap === null ? null : xlF(`E${sr}-F${sr}`, inf.ton + inf.dm - xuat), { fill, bold:true, fmt:XL_NUM });
-      ws1.mergeCells(sr, 8, sr, 10);
-      xlPut(ws1, sr, 8, noteBits.join(" · "), { fill, color: over ? "FFC00000" : (noShip ? "FF9C5700" : "FF595959"), wrap:true });
-      sr++;
+
+  const nM = cust.reduce((s, c) => s + c.rows.length, 0);
+  const nP = cust.reduce((s, c) => s + c.it.entries.length, 0);
+  const DS = 5, DEND = DS + Math.max(nM, 1) - 1, DE = DEND + 300;     // dòng dữ liệu sheet theo tháng (chừa 300 dòng để thêm)
+  const PS = 5, PEND = PS + Math.max(nP, 1) - 1, PE = PEND + 300;
+  const CS = 7, CE = 306;
+  const TH = "'Tổng hợp khách hàng'", TD = "'Theo dõi theo tháng'", PH = "'Chi tiết phiếu xuất'";
+  const INPUT = "FFFFF2CC", CALC = "FFEDEDED";   // chỉ là "nhãn" nội bộ; màu thật tính theo nhóm MEN / ĐÁ / TỔNG bên dưới
+  // Hệ màu: MEN = xanh lam-lá (teal) · ĐÁ = đỏ · TỔNG = xám xanh · cột thông tin = xanh navy. Cảnh báo vượt dùng CAM (không dùng đỏ để khỏi lẫn với ĐÁ).
+  const G = {
+    men: { hdr:"FF0F766E", tint:"FFE3F3F0", lab:"FFB9E2DB", ink:"FF0F5C55" },
+    da:  { hdr:"FFB91C1C", tint:"FFFBE5E5", lab:"FFF2BABA", ink:"FF8F1616" },
+    tot: { hdr:"FF475569", tint:"FFF1F3F6", lab:"FFD5DAE2", ink:"FF334155" }
+  };
+  const NAVY = "FF1F3A5F", WARN = "FF9A3412", GREY = "FF6B7280";
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Tra cứu Giá trị Cấp mẫu DSM";
+  if(wb.calcProperties) wb.calcProperties.fullCalcOnLoad = true;
+  const wg = wb.addWorksheet("Hướng dẫn", { views:[{ showGridLines:false }] });
+  const wt = wb.addWorksheet("Tổng hợp khách hàng", { views:[{ state:"frozen", xSplit:1, ySplit:6, showGridLines:false }] });
+  const wd = wb.addWorksheet("Theo dõi theo tháng", { views:[{ state:"frozen", xSplit:3, ySplit:4, showGridLines:false }] });
+  const wp = wb.addWorksheet("Chi tiết phiếu xuất", { views:[{ state:"frozen", ySplit:4, showGridLines:false }] });
+  // nhóm màu của từng cột
+  const GRP = new Map([
+    [wd, ["","","","men","men","men","da","da","da","tot","men","da","tot","men","da","tot","","","","",""]],
+    [wt, ["","","men","da","","tot","tot","men","da","tot","","",""]],
+    [wp, ["","","","","","","","","men","da","","tot"]]
+  ]);
+  /** xlPut có tô nền theo nhóm màu của cột (fill INPUT/CALC → nền nhạt MEN / ĐÁ / TỔNG, hoặc trắng với cột thông tin) */
+  const P = (ws, r, c, v, o) => {
+    o = o || {};
+    if(o.fill === INPUT || o.fill === CALC){ const g = GRP.get(ws)[c - 1]; o = { ...o, fill: g ? G[g].tint : undefined }; }
+    return xlPut(ws, r, c, v, o);
+  };
+  /** Hàng tiêu đề: nhãn nhóm (MEN / ĐÁ / TỔNG) ở hàng trên, tiêu đề cột tô màu theo nhóm */
+  const header = (ws, row, heads) => {
+    const grp = GRP.get(ws);
+    heads.forEach((h, i) => {
+      const g = grp[i];
+      xlPut(ws, row, i + 1, h, { bold:true, color:"FFFFFFFF", fill: g ? G[g].hdr : NAVY, h:"center", wrap:true });
+      if(g) xlPut(ws, row - 1, i + 1, g === "men" ? "MEN" : g === "da" ? "ĐÁ" : "TỔNG", { bold:true, size:9, color:G[g].ink, fill:G[g].lab, h:"center" });
+    });
+    ws.getRow(row).height = 44;
+  };
+  const orangeStyle = { fill:{ type:"pattern", pattern:"solid", bgColor:{ argb:"FFFED7AA" } }, font:{ color:{ argb:WARN }, bold:true } };
+
+  /* ================= Sheet: Chi tiết phiếu xuất ================= */
+  P(wp, 1, 1, "CHI TIẾT CÁC PHIẾU XUẤT MẪU DSM", { size:14, bold:true, noBorder:true });
+  P(wp, 2, 1, "Mỗi dòng là một phiếu xuất (dữ liệu Odoo). Cột 'Đã xuất MEN / ĐÁ' của sheet 'Theo dõi theo tháng' cộng tự động từ sheet này.", { size:9, italic:true, color:"FF595959", noBorder:true });
+  header(wp, 4, ["Khách hàng","Ngày xuất","Tháng","Diễn giải","Loại","Mã đơn hàng","Kho","Trạng thái","MEN (VNĐ)","ĐÁ (VNĐ)","Khác (VNĐ)","Tổng (VNĐ)"]);
+  let pr = PS;
+  for(const c of cust){
+    for(const e of c.it.entries){
+      const dt = new Date(Date.UTC(e.ngay.getFullYear(), e.ngay.getMonth(), e.ngay.getDate()));
+      P(wp, pr, 1, c.it.name);
+      P(wp, pr, 2, dt, { fmt:"dd/mm/yyyy", h:"left" });
+      P(wp, pr, 3, mkDate(e.mk), { fmt:"m/yyyy", h:"center" });
+      P(wp, pr, 4, e.ghiChu || e.maDonHang || "Xuất mẫu", { wrap:true });
+      P(wp, pr, 5, e.loai === "men" ? "MEN" : e.loai === "da" ? "ĐÁ" : "", { h:"center", fill: e.loai === "men" ? G.men.tint : e.loai === "da" ? G.da.tint : undefined });
+      P(wp, pr, 6, e.maDonHang || ""); P(wp, pr, 7, e.kho || "", { wrap:true }); P(wp, pr, 8, e.trangThai || "");
+      P(wp, pr, 9,  e.loai === "men" ? e.tien : 0, { color:XL_BLUE, fmt:XL_NUM });
+      P(wp, pr, 10, e.loai === "da" ? e.tien : 0,  { color:XL_BLUE, fmt:XL_NUM });
+      P(wp, pr, 11, !e.loai ? e.tien : 0,          { color:XL_BLUE, fmt:XL_NUM });
+      P(wp, pr, 12, xlF(`SUM(I${pr}:K${pr})`, e.tien), { fmt:XL_NUM });
+      pr++;
     }
   }
-  sr++;
-  [ "Cách đọc: Tổng tiền cấp mẫu = Tồn đầu kỳ + Định mức phát sinh · Còn lại = Tổng tiền cấp mẫu − Đã xuất · % đã dùng = Đã xuất ÷ Tổng tiền cấp mẫu.",
-    "MEN và ĐÁ bù cho nhau: chỉ coi là vượt khi dòng TỔNG vượt (cột Kết luận). Chi tiết từng phiếu xuất xem sheet 'Chi tiết phiếu xuất'.",
-    "Chữ xanh dương = số lấy từ REPORT V2; chữ đen = công thức. Số tiền hiển thị làm tròn đến đồng nên có thể lệch 1đ khi cộng tay.",
-    anyComputed ? "(*) Tháng có dấu (*): tiền cấp mẫu = tồn đầu kỳ (phần chưa dùng của tháng trước) + định mức của sheet 'Định mức DSM_Update ngày 10 mỗi tháng' (dòng tháng liền trước, vì định mức cập nhật ngày 10 áp cho tháng xuất kế tiếp)." : "",
-    missing.length ? "Lưu ý: không có định mức trong REPORT V2 cho: " + missing.join(", ") : ""
-  ].filter(Boolean).forEach(t => { xlPut(ws1, sr, 1, t, { size:9, italic:true, color:"FF595959", noBorder:true }); sr++; });
-  [26,16,20,20,22,20,22,20,10,34].forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
+  [26,12,10,34,8,14,22,14,15,15,13,15].forEach((w, i) => { wp.getColumn(i + 1).width = w; });
+  wp.getColumn(11).hidden = !cust.some(c => c.it.entries.some(e => !e.loai));
 
+  /* ================= Sheet: Theo dõi theo tháng (đúng cấu trúc form) ================= */
+  P(wd, 1, 1, "THEO DÕI TIỀN CẤP MẪU DSM — THEO TỪNG KHÁCH HÀNG, TỪNG THÁNG", { size:15, bold:true, noBorder:true });
+  P(wd, 2, 1, "Mỗi dòng = 1 khách hàng × 1 tháng. Cột xanh lam-lá = MEN · cột đỏ = ĐÁ · cột xám xanh = TỔNG. Chữ xanh dương = số lấy từ hệ thống, chữ đen = công thức. Tồn MEN, Tồn ĐÁ của tháng sau = Còn lại MEN, ĐÁ của tháng trước. Màu cam = vượt / cần chú ý.", { size:9, italic:true, color:"FF595959", noBorder:true });
+  header(wd, 4,
+    ["Khách hàng","Miền / Khu vực","Tháng","Tồn MEN\n(dư từ tháng trước)","Định mức MEN\ncấp mới của tháng","Được phép xuất MEN\n(Tồn + Định mức)",
+     "Tồn ĐÁ\n(dư từ tháng trước)","Định mức ĐÁ\ncấp mới của tháng","Được phép xuất ĐÁ\n(Tồn + Định mức)","TỔNG Được phép xuất\n(Tồn + Định mức)",
+     "Đã xuất MEN","Đã xuất ĐÁ","Tổng đã xuất","Còn lại MEN","Còn lại ĐÁ","Còn lại / Vượt\n(tổng, số âm = vượt)","% đã dùng","Trạng thái","Kiểm tra nhập liệu","Ghi chú","Tháng liền trước\n(cột phụ)"]);
+  let r = DS;
+  const lastRowOf = {};        // tên khách -> { row, vuot }
+  for(const c of cust){
+    let vuot = 0, prevMk = null;
+    c.rows.forEach((x, i) => {
+      const p = r - 1;
+      const act = `AND(A${r}<>"",C${r}<>"")`;
+      const status = x.tot < 0 ? "VƯỢT" : (x.xuat + 0 === 0 && x.sp.oth === 0 ? "Không xuất hàng" : "Chưa vượt");
+      if(x.tot < 0) vuot++;
+      const pct = x.allow === 0 ? 0 : x.xuat / x.allow;
+      P(wd, r, 1, c.it.name, { fill:INPUT });
+      P(wd, r, 2, xlF(`IF(A${r}="","",IFERROR(VLOOKUP(A${r},${TH}!$A$${CS}:$B$${CE},2,FALSE)&"",""))`, c.it.c.khuVucChinh || ""), { fill:CALC });
+      P(wd, r, 3, mkDate(x.mk), { fill:INPUT, fmt:"m/yyyy", h:"center", bold:true });
+      P(wd, r, 21, xlF(`IF(${act},_xlfn.MAXIFS(C$4:C${p},A$4:A${p},A${r},C$4:C${p},"<"&C${r}),"")`, prevMk ? ser(prevMk) : 0), { fill:CALC, fmt:"m/yyyy", h:"center" });
+      [["D","N",3,x.ton.men], ["G","O",4,x.ton.da]].forEach(([col, rem, vcol, val]) => {
+        const ci = col.charCodeAt(0) - 64;
+        P(wd, r, ci, xlF(`IF(${act},IF(U${r}=0,IFERROR(N(VLOOKUP(A${r},${TH}!$A$${CS}:$D$${CE},${vcol},FALSE)),0),IF(SUMIFS(P$4:P${p},A$4:A${p},A${r},C$4:C${p},U${r})<0,0,SUMIFS(${rem}$4:${rem}${p},A$4:A${p},A${r},C$4:C${p},U${r}))),"")`, val), { fill:CALC, fmt:XL_NUM });
+      });
+      P(wd, r, 5, x.dm.men, { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
+      P(wd, r, 8, x.dm.da,  { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
+      P(wd, r, 6, xlF(`IF(${act},D${r}+E${r},"")`, x.allowMen), { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 9, xlF(`IF(${act},G${r}+H${r},"")`, x.allowDa),  { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 10, xlF(`IF(${act},F${r}+I${r},"")`, x.allow),   { fill:CALC, fmt:XL_NUM, bold:true });
+      P(wd, r, 11, xlF(`IF(${act},SUMIFS(${PH}!$I$${PS}:$I$${PE},${PH}!$A$${PS}:$A$${PE},A${r},${PH}!$C$${PS}:$C$${PE},C${r}),"")`, x.sp.men), { fill:INPUT, fmt:XL_NUM });
+      P(wd, r, 12, xlF(`IF(${act},SUMIFS(${PH}!$J$${PS}:$J$${PE},${PH}!$A$${PS}:$A$${PE},A${r},${PH}!$C$${PS}:$C$${PE},C${r}),"")`, x.sp.da),  { fill:INPUT, fmt:XL_NUM });
+      P(wd, r, 13, xlF(`IF(${act},SUM(K${r}:L${r}),"")`, x.xuat), { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 14, xlF(`IF(${act},F${r}-K${r},"")`, x.remMen), { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 15, xlF(`IF(${act},I${r}-L${r},"")`, x.remDa),  { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 16, xlF(`IF(${act},J${r}-M${r},"")`, x.tot),    { fill:CALC, fmt:XL_NUM, bold:true });
+      P(wd, r, 17, xlF(`IF(${act},IF(J${r}=0,0,M${r}/J${r}),"")`, pct), { fill:CALC, fmt:"0%", h:"center" });
+      P(wd, r, 18, xlF(`IF(${act},IF(P${r}<0,"VƯỢT",IF(M${r}=0,"Không xuất hàng","Chưa vượt")),"")`, status), { fill:CALC, h:"center" });
+      P(wd, r, 19, xlF(`IF(${act},IF(COUNTIFS(A$4:A${p},A${r},C$4:C${p},">="&C${r})>0,"⚠ Trùng tháng / sai thứ tự (nhập tháng cũ trước)",IF(COUNTIF(${TH}!$A$${CS}:$A$${CE},A${r})=0,"⚠ Khách chưa có trong sheet Tổng hợp khách hàng","")),"")`, ""), { fill:CALC, color:WARN });
+      P(wd, r, 20, x.notes.join(" · "), { fill:INPUT, wrap:true, color: x.notes.some(n => /^Lệch|^Chưa có/.test(n)) ? WARN : "FF595959" });
+      prevMk = x.mk;
+      lastRowOf[c.it.name] = { row: r, vuot, last: x };
+      r++;
+    });
+  }
+  const lastD = Math.max(DEND, DS);
+  ["A:C", "P:P", "R:R"].forEach(rg => { const [c1, c2] = rg.split(":"); wd.addConditionalFormatting({ ref:`${c1}${DS}:${c2}${lastD}`, rules:[{ type:"expression", formulae:[`$R${DS}="VƯỢT"`], style:orangeStyle }] }); });
+  wd.addConditionalFormatting({ ref:`R${DS}:R${lastD}`, rules:[{ type:"expression", formulae:[`$R${DS}="Không xuất hàng"`], style:{ font:{ italic:true, color:{ argb:GREY } } } }] });
+  wd.addConditionalFormatting({ ref:`N${DS}:O${lastD}`, rules:[{ type:"cellIs", operator:"lessThan", formulae:["0"], style:{ font:{ color:{ argb:WARN } } } }] });
+  [26,16,10,17,18,20,17,18,20,21,15,15,15,16,16,20,10,16,44,40,14].forEach((w, i) => { wd.getColumn(i + 1).width = w; });
+  wd.getColumn(21).hidden = true;
+
+  /* ================= Sheet: Tổng hợp khách hàng ================= */
+  const kyLabel = target === "Tất cả" ? "Tất cả các tháng" : "Tháng " + target;
+  P(wt, 1, 1, "TỔNG HỢP TIỀN CẤP MẪU DSM THEO KHÁCH HÀNG", { size:15, bold:true, noBorder:true });
+  P(wt, 2, 1, `Báo cáo xuất ngày ${fmtDate(new Date())} · Kỳ: ${kyLabel}${activeRegion !== "Tất cả" ? " · " + activeRegion : ""} · Số liệu định mức (REPORT V2) cập nhật: ${updated || "—"}. Số liệu từng tháng xem sheet 'Theo dõi theo tháng'. Cột xanh lam-lá = MEN · cột đỏ = ĐÁ · cột xám xanh = TỔNG · màu cam = vượt.`, { size:9, italic:true, color:"FF595959", noBorder:true });
+  const nC = cust.length, sumRem = cust.reduce((s, c) => s + (c.rows.length ? c.rows[c.rows.length - 1].tot : 0), 0);
+  const nOver = cust.filter(c => c.rows.length && c.rows[c.rows.length - 1].tot < 0).length;
+  P(wt, 3, 1, "Tổng số khách", { bold:true, fill:CALC }); P(wt, 3, 2, xlF(`COUNTIF(A${CS}:A${CE},"?*")`, nC), { bold:true, fill:CALC, h:"center" });
+  P(wt, 3, 5, "Khách đang vượt", { bold:true, fill:CALC }); P(wt, 3, 6, xlF(`COUNTIF(K${CS}:K${CE},"VƯỢT")`, nOver), { bold:true, fill:CALC, h:"center" });
+  P(wt, 3, 9, "Tổng còn lại (VNĐ)", { bold:true, fill:CALC }); P(wt, 3, 10, xlF(`SUM(J${CS}:J${CE})`, sumRem), { bold:true, fill:CALC, fmt:XL_NUM });
+  header(wt, 6,
+    ["Khách hàng","Miền / Khu vực","Tồn MEN ban đầu\n(tháng đầu trong file)","Tồn ĐÁ ban đầu\n(tháng đầu trong file)","Tháng gần nhất\ncó số liệu","Tổng tiền cấp mẫu\ncộng dồn","Tổng đã xuất\ncộng dồn","Còn lại MEN\nhiện tại","Còn lại ĐÁ\nhiện tại","Còn lại hiện tại\n(tổng)","Trạng thái","Số tháng\nđã vượt","Ghi chú"]);
+  const dc = c => `${TD}!$${c}$${DS}:$${c}$${DE}`;
+  let sr = CS;
+  for(const c of cust){
+    if(!c.rows.length) continue;
+    const last = c.rows[c.rows.length - 1];
+    const totDm = c.rows.reduce((s, x) => s + x.dm.men + x.dm.da, 0), totXuat = c.rows.reduce((s, x) => s + x.xuat, 0);
+    const info = lastRowOf[c.it.name];
+    P(wt, sr, 1, c.it.name, { fill:INPUT });
+    P(wt, sr, 2, c.it.c.khuVucChinh || "", { fill:INPUT });
+    P(wt, sr, 3, c.open.men, { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
+    P(wt, sr, 4, c.open.da,  { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
+    P(wt, sr, 5, xlF(`IF(A${sr}="","",IF(COUNTIF(${dc("A")},A${sr})=0,"",_xlfn.MAXIFS(${dc("C")},${dc("A")},A${sr})))`, ser(last.mk)), { fill:CALC, fmt:"m/yyyy", h:"center" });
+    P(wt, sr, 6, xlF(`IF(A${sr}="","",N(C${sr})+N(D${sr})+SUMIFS(${dc("E")},${dc("A")},A${sr})+SUMIFS(${dc("H")},${dc("A")},A${sr}))`, c.open.men + c.open.da + totDm), { fill:CALC, fmt:XL_NUM });
+    P(wt, sr, 7, xlF(`IF(A${sr}="","",SUMIFS(${dc("K")},${dc("A")},A${sr})+SUMIFS(${dc("L")},${dc("A")},A${sr}))`, totXuat), { fill:CALC, fmt:XL_NUM });
+    [[8,"N",last.remMen],[9,"O",last.remDa],[10,"P",last.tot]].forEach(([ci, src, val]) =>
+      P(wt, sr, ci, xlF(`IF(OR(A${sr}="",E${sr}=""),"",SUMIFS(${dc(src)},${dc("A")},A${sr},${dc("C")},E${sr}))`, val), { fill:CALC, fmt:XL_NUM, bold: ci === 10 }));
+    P(wt, sr, 11, xlF(`IF(J${sr}="","",IF(J${sr}<0,"VƯỢT","Chưa vượt"))`, last.tot < 0 ? "VƯỢT" : "Chưa vượt"), { fill:CALC, h:"center" });
+    P(wt, sr, 12, xlF(`IF(A${sr}="","",COUNTIFS(${dc("A")},A${sr},${dc("R")},"VƯỢT"))`, info ? info.vuot : 0), { fill:CALC, h:"center" });
+    const warn = c.rows.flatMap(x => x.notes.filter(n => /^Lệch|^Chưa có|không phân loại/.test(n)).map(n => `${x.mk}: ${n}`));
+    P(wt, sr, 13, warn.join(" · "), { fill:INPUT, wrap:true, color:WARN });
+    sr++;
+  }
+  ["A:B", "J:K"].forEach(rg => { const [c1, c2] = rg.split(":"); wt.addConditionalFormatting({ ref:`${c1}${CS}:${c2}${Math.max(sr - 1, CS)}`, rules:[{ type:"expression", formulae:[`$K${CS}="VƯỢT"`], style:orangeStyle }] }); });
+  [28,16,18,18,15,19,19,17,17,19,14,11,40].forEach((w, i) => { wt.getColumn(i + 1).width = w; });
+
+  /* ================= Sheet: Hướng dẫn ================= */
+  const lines = [
+    ["BÁO CÁO TIỀN CẤP MẪU DSM — CÁCH ĐỌC FILE", "t"],
+    ["QUY ƯỚC MÀU", "h"],
+    ["• Cột XANH LAM-LÁ = MEN.     • Cột ĐỎ = ĐÁ.     • Cột XÁM XANH = TỔNG (MEN + ĐÁ).     • Cột xanh navy = thông tin chung (khách hàng, tháng, trạng thái…).", ""],
+    ["• Chữ xanh dương = số lấy từ hệ thống; chữ đen = công thức tự tính.     • Màu CAM = khách / tháng đã vượt tiền cấp mẫu hoặc số âm cần chú ý (không dùng đỏ để khỏi lẫn với cột ĐÁ).", ""],
+    ["", ""],
+    ["CÁC SHEET", "h"],
+    ["• Tổng hợp khách hàng: mỗi khách 1 dòng — tổng tiền cấp mẫu và đã xuất cộng dồn, còn lại MEN / ĐÁ / tổng, trạng thái, số tháng đã vượt.", ""],
+    ["• Theo dõi theo tháng: mỗi dòng là 1 khách trong 1 tháng — tồn đầu kỳ, định mức mới, được phép xuất, đã xuất, còn lại MEN / ĐÁ / tổng, trạng thái.", ""],
+    ["• Chi tiết phiếu xuất: từng phiếu xuất (ngày, mã đơn, kho, loại, số tiền); sheet 'Theo dõi theo tháng' cộng từ đây.", ""],
+    ["", ""],
+    ["QUY TẮC TÍNH", "h"],
+    ["• Được phép xuất MEN = Tồn MEN + Định mức MEN (ĐÁ tương tự).   • TỔNG Được phép xuất = MEN + ĐÁ.   • Còn lại MEN = Được phép xuất MEN − Đã xuất MEN (ĐÁ tương tự).   • Còn lại (tổng) = TỔNG Được phép xuất − Tổng đã xuất.", ""],
+    ["• Tồn MEN, Tồn ĐÁ của tháng sau = Còn lại MEN, Còn lại ĐÁ của tháng trước. MEN hay ĐÁ riêng lẻ âm thì được bên kia bù (vượt chỉ tính trên TỔNG). Nếu TỔNG còn lại tháng trước âm thì cả hai tồn tháng sau về 0, không bị trừ thêm.", ""],
+    ["• Tháng không xuất hàng vẫn có dòng riêng; tiền cấp mẫu chưa dùng cộng dồn sang tháng sau.", ""],
+    ["• Dòng tô đỏ = tháng đã xuất vượt tiền cấp mẫu.", ""],
+    ["", ""],
+    ["LƯU Ý", "h"],
+    ["• Tháng có chữ '(*) tính từ sheet Định mức' ở cột Ghi chú: REPORT V2 không có số tháng đó nên tiền cấp mẫu = tồn (phần dư tháng trước) + định mức của sheet 'Định mức DSM_Update ngày 10 mỗi tháng' (dòng tháng liền trước).", ""],
+    ["• Ghi chú 'Lệch REPORT V2': tồn đầu kỳ tính theo quy tắc trên khác với số của REPORT V2 ở tháng đó — cần kiểm tra lại.", ""],
+    ["• Số tiền lưu đầy đủ chữ số thập phân và hiển thị làm tròn đến đồng, nên cộng tay các số hiển thị có thể lệch 1đ.", ""],
+    ["• Cần Excel 2019 / Microsoft 365 trở lên (dùng hàm MAXIFS).", ""],
+  ];
+  lines.forEach(([t, k], i) => {
+    const cl = wg.getCell(i + 1, 1);
+    cl.value = t;
+    cl.font = { name:XL_FONT, size: k === "t" ? 15 : k === "h" ? 11 : 10, bold: k === "t" || k === "h", color:{ argb: k ? "FF1F3A5F" : "FF000000" } };
+    cl.alignment = { wrapText:true, vertical:"top" };
+    if(t.length > 150) wg.getRow(i + 1).height = 28;
+  });
+  wg.getColumn(1).width = 150;
+
+  wb.views = [{ activeTab: 1 }];
   const buf = await wb.xlsx.writeBuffer();
   return { blob: new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), missing };
 }
