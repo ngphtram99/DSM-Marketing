@@ -1697,6 +1697,7 @@ async function buildDsmXlsx(names){
       const allowMen = ton.men + dm.men, allowDa = ton.da + dm.da;
       const remMen = allowMen - sp.men, remDa = allowDa - sp.da;
       const notes = [];
+      if(sp.men + sp.da + sp.oth === 0) notes.push("Không xuất hàng trong tháng");
       if(!inf) notes.push("Chưa có định mức tháng này trong REPORT V2");
       if(inf && inf.computed) notes.push("(*) tính từ sheet Định mức");
       if(inf && !inf.computed && i > 0 && (Math.abs(ton.men - inf.ton.men) > 1 || Math.abs(ton.da - inf.ton.da) > 1))
@@ -1732,7 +1733,7 @@ async function buildDsmXlsx(names){
   const wp = wb.addWorksheet("Chi tiết phiếu xuất", { views:[{ state:"frozen", ySplit:4, showGridLines:false }] });
   // nhóm màu của từng cột
   const GRP = new Map([
-    [wd, ["","","","men","men","men","da","da","da","tot","men","da","tot","men","da","tot","","","","",""]],
+    [wd, ["","","","","men","men","men","da","da","da","tot","men","da","tot","men","da","tot","","","","",""]],
     [wt, ["","","men","da","","tot","tot","men","da","tot","","",""]],
     [wp, ["","","","","","","","","men","da","","tot"]]
   ]);
@@ -1756,8 +1757,8 @@ async function buildDsmXlsx(names){
 
   /* ================= Sheet: Chi tiết phiếu xuất ================= */
   P(wp, 1, 1, "CHI TIẾT CÁC PHIẾU XUẤT MẪU DSM", { size:14, bold:true, noBorder:true });
-  P(wp, 2, 1, "Mỗi dòng là một phiếu xuất (dữ liệu Odoo). Cột 'Đã xuất MEN / ĐÁ' của sheet 'Theo dõi theo tháng' cộng tự động từ sheet này.", { size:9, italic:true, color:"FF595959", noBorder:true });
-  header(wp, 4, ["Khách hàng","Ngày xuất","Tháng","Diễn giải","Loại","Mã đơn hàng","Kho","Trạng thái","MEN (VNĐ)","ĐÁ (VNĐ)","Khác (VNĐ)","Tổng (VNĐ)"]);
+  P(wp, 2, 1, "Mỗi dòng là một phiếu xuất (dữ liệu Odoo). Cột 'Đã xuất MEN / ĐÁ' của sheet 'Theo dõi theo tháng' cộng tự động từ sheet này (phiếu xuất tháng 5 tính vào dòng DSM tháng 4).", { size:9, italic:true, color:"FF595959", noBorder:true });
+  header(wp, 4, ["Khách hàng","Ngày xuất","Tháng xuất","Diễn giải","Loại","Mã đơn hàng","Kho","Trạng thái","MEN (VNĐ)","ĐÁ (VNĐ)","Khác (VNĐ)","Tổng (VNĐ)"]);
   let pr = PS;
   for(const c of cust){
     for(const e of c.it.entries){
@@ -1778,69 +1779,70 @@ async function buildDsmXlsx(names){
   [26,12,10,34,8,14,22,14,15,15,13,15].forEach((w, i) => { wp.getColumn(i + 1).width = w; });
   wp.getColumn(11).hidden = !cust.some(c => c.it.entries.some(e => !e.loai));
 
-  /* ================= Sheet: Theo dõi theo tháng (đúng cấu trúc form) ================= */
-  P(wd, 1, 1, "THEO DÕI TIỀN CẤP MẪU DSM — THEO TỪNG KHÁCH HÀNG, TỪNG THÁNG", { size:15, bold:true, noBorder:true });
-  P(wd, 2, 1, "Mỗi dòng = 1 khách hàng × 1 tháng. Cột xanh lam-lá = MEN · cột đỏ = ĐÁ · cột xám xanh = TỔNG. Chữ xanh dương = số lấy từ hệ thống, chữ đen = công thức. Tồn MEN, Tồn ĐÁ của tháng sau = Còn lại MEN, ĐÁ của tháng trước. Màu cam = vượt / cần chú ý.", { size:9, italic:true, color:"FF595959", noBorder:true });
+  /* ================= Sheet: Theo dõi theo tháng DSM (đúng cấu trúc form) ================= */
+  P(wd, 1, 1, "THEO DÕI TIỀN CẤP MẪU DSM — THEO TỪNG KHÁCH HÀNG, TỪNG THÁNG DSM", { size:15, bold:true, noBorder:true });
+  P(wd, 2, 1, "Mỗi dòng = 1 khách hàng × 1 tháng DSM. DSM tháng 4 áp dụng cho tháng 5: định mức của dòng DSM tháng 4 dùng để xuất trong tháng 5, và các phiếu xuất tháng 5 tính vào dòng đó. Cột xanh lam-lá = MEN · cột đỏ = ĐÁ · cột xám xanh = TỔNG · chữ xanh dương = số hệ thống, chữ đen = công thức · màu cam = vượt.", { size:9, italic:true, color:"FF595959", noBorder:true });
   header(wd, 4,
-    ["Khách hàng","Miền / Khu vực","Tháng","Tồn MEN\n(dư từ tháng trước)","Định mức MEN\ncấp mới của tháng","Được phép xuất MEN\n(Tồn + Định mức)",
-     "Tồn ĐÁ\n(dư từ tháng trước)","Định mức ĐÁ\ncấp mới của tháng","Được phép xuất ĐÁ\n(Tồn + Định mức)","TỔNG Được phép xuất\n(Tồn + Định mức)",
-     "Đã xuất MEN","Đã xuất ĐÁ","Tổng đã xuất","Còn lại MEN","Còn lại ĐÁ","Còn lại / Vượt\n(tổng, số âm = vượt)","% đã dùng","Trạng thái","Kiểm tra nhập liệu","Ghi chú","Tháng liền trước\n(cột phụ)"]);
+    ["Khách hàng","Miền / Khu vực","Tháng DSM\n(nguồn định mức)","Áp dụng cho\ntháng","Tồn MEN\n(dư từ tháng trước)","Định mức MEN\ncấp mới (DSM tháng này)","Được phép xuất MEN\n(Tồn + Định mức)",
+     "Tồn ĐÁ\n(dư từ tháng trước)","Định mức ĐÁ\ncấp mới (DSM tháng này)","Được phép xuất ĐÁ\n(Tồn + Định mức)","TỔNG Được phép xuất\n(Tồn + Định mức)",
+     "Đã xuất MEN","Đã xuất ĐÁ","Tổng đã xuất","Còn lại MEN","Còn lại ĐÁ","Còn lại / Vượt\n(tổng, số âm = vượt)","% đã dùng","Trạng thái","Kiểm tra nhập liệu","Ghi chú","Tháng DSM liền trước\n(cột phụ)"]);
   let r = DS;
-  const lastRowOf = {};        // tên khách -> { row, vuot }
+  const lastRowOf = {};        // tên khách -> { row, vuot, last }
   for(const c of cust){
-    let vuot = 0, prevMk = null;
+    let vuot = 0, prevDsm = null;
     c.rows.forEach((x, i) => {
-      const p = r - 1;
+      const p = r - 1, dsm = xlPrevMk(x.mk);          // x.mk = tháng xuất (áp dụng); dsm = tháng DSM = tháng xuất − 1
       const act = `AND(A${r}<>"",C${r}<>"")`;
-      const status = x.tot < 0 ? "VƯỢT" : (x.xuat + 0 === 0 && x.sp.oth === 0 ? "Không xuất hàng" : "Chưa vượt");
+      const status = x.tot < 0 ? "VƯỢT" : (x.xuat === 0 ? "Không xuất hàng" : "Chưa vượt");
       if(x.tot < 0) vuot++;
       const pct = x.allow === 0 ? 0 : x.xuat / x.allow;
       P(wd, r, 1, c.it.name, { fill:INPUT });
       P(wd, r, 2, xlF(`IF(A${r}="","",IFERROR(VLOOKUP(A${r},${TH}!$A$${CS}:$B$${CE},2,FALSE)&"",""))`, c.it.c.khuVucChinh || ""), { fill:CALC });
-      P(wd, r, 3, mkDate(x.mk), { fill:INPUT, fmt:"m/yyyy", h:"center", bold:true });
-      P(wd, r, 21, xlF(`IF(${act},_xlfn.MAXIFS(C$4:C${p},A$4:A${p},A${r},C$4:C${p},"<"&C${r}),"")`, prevMk ? ser(prevMk) : 0), { fill:CALC, fmt:"m/yyyy", h:"center" });
-      [["D","N",3,x.ton.men], ["G","O",4,x.ton.da]].forEach(([col, rem, vcol, val]) => {
+      P(wd, r, 3, mkDate(dsm), { fill:INPUT, fmt:"m/yyyy", h:"center", bold:true });
+      P(wd, r, 4, xlF(`IF(${act},EDATE(C${r},1),"")`, ser(x.mk)), { fill:CALC, fmt:"m/yyyy", h:"center" });
+      P(wd, r, 22, xlF(`IF(${act},_xlfn.MAXIFS(C$4:C${p},A$4:A${p},A${r},C$4:C${p},"<"&C${r}),"")`, prevDsm ? ser(prevDsm) : 0), { fill:CALC, fmt:"m/yyyy", h:"center" });
+      [["E","O",3,x.ton.men], ["H","P",4,x.ton.da]].forEach(([col, rem, vcol, val]) => {
         const ci = col.charCodeAt(0) - 64;
-        P(wd, r, ci, xlF(`IF(${act},IF(U${r}=0,IFERROR(N(VLOOKUP(A${r},${TH}!$A$${CS}:$D$${CE},${vcol},FALSE)),0),IF(SUMIFS(P$4:P${p},A$4:A${p},A${r},C$4:C${p},U${r})<0,0,SUMIFS(${rem}$4:${rem}${p},A$4:A${p},A${r},C$4:C${p},U${r}))),"")`, val), { fill:CALC, fmt:XL_NUM });
+        P(wd, r, ci, xlF(`IF(${act},IF(V${r}=0,IFERROR(N(VLOOKUP(A${r},${TH}!$A$${CS}:$D$${CE},${vcol},FALSE)),0),IF(SUMIFS(Q$4:Q${p},A$4:A${p},A${r},C$4:C${p},V${r})<0,0,SUMIFS(${rem}$4:${rem}${p},A$4:A${p},A${r},C$4:C${p},V${r}))),"")`, val), { fill:CALC, fmt:XL_NUM });
       });
-      P(wd, r, 5, x.dm.men, { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
-      P(wd, r, 8, x.dm.da,  { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
-      P(wd, r, 6, xlF(`IF(${act},D${r}+E${r},"")`, x.allowMen), { fill:CALC, fmt:XL_NUM });
-      P(wd, r, 9, xlF(`IF(${act},G${r}+H${r},"")`, x.allowDa),  { fill:CALC, fmt:XL_NUM });
-      P(wd, r, 10, xlF(`IF(${act},F${r}+I${r},"")`, x.allow),   { fill:CALC, fmt:XL_NUM, bold:true });
-      P(wd, r, 11, xlF(`IF(${act},SUMIFS(${PH}!$I$${PS}:$I$${PE},${PH}!$A$${PS}:$A$${PE},A${r},${PH}!$C$${PS}:$C$${PE},C${r}),"")`, x.sp.men), { fill:INPUT, fmt:XL_NUM });
-      P(wd, r, 12, xlF(`IF(${act},SUMIFS(${PH}!$J$${PS}:$J$${PE},${PH}!$A$${PS}:$A$${PE},A${r},${PH}!$C$${PS}:$C$${PE},C${r}),"")`, x.sp.da),  { fill:INPUT, fmt:XL_NUM });
-      P(wd, r, 13, xlF(`IF(${act},SUM(K${r}:L${r}),"")`, x.xuat), { fill:CALC, fmt:XL_NUM });
-      P(wd, r, 14, xlF(`IF(${act},F${r}-K${r},"")`, x.remMen), { fill:CALC, fmt:XL_NUM });
-      P(wd, r, 15, xlF(`IF(${act},I${r}-L${r},"")`, x.remDa),  { fill:CALC, fmt:XL_NUM });
-      P(wd, r, 16, xlF(`IF(${act},J${r}-M${r},"")`, x.tot),    { fill:CALC, fmt:XL_NUM, bold:true });
-      P(wd, r, 17, xlF(`IF(${act},IF(J${r}=0,0,M${r}/J${r}),"")`, pct), { fill:CALC, fmt:"0%", h:"center" });
-      P(wd, r, 18, xlF(`IF(${act},IF(P${r}<0,"VƯỢT",IF(M${r}=0,"Không xuất hàng","Chưa vượt")),"")`, status), { fill:CALC, h:"center" });
-      P(wd, r, 19, xlF(`IF(${act},IF(COUNTIFS(A$4:A${p},A${r},C$4:C${p},">="&C${r})>0,"⚠ Trùng tháng / sai thứ tự (nhập tháng cũ trước)",IF(COUNTIF(${TH}!$A$${CS}:$A$${CE},A${r})=0,"⚠ Khách chưa có trong sheet Tổng hợp khách hàng","")),"")`, ""), { fill:CALC, color:WARN });
-      P(wd, r, 20, x.notes.join(" · "), { fill:INPUT, wrap:true, color: x.notes.some(n => /^Lệch|^Chưa có/.test(n)) ? WARN : "FF595959" });
-      prevMk = x.mk;
+      P(wd, r, 6, x.dm.men, { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
+      P(wd, r, 9, x.dm.da,  { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
+      P(wd, r, 7,  xlF(`IF(${act},E${r}+F${r},"")`, x.allowMen), { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 10, xlF(`IF(${act},H${r}+I${r},"")`, x.allowDa),  { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 11, xlF(`IF(${act},G${r}+J${r},"")`, x.allow),    { fill:CALC, fmt:XL_NUM, bold:true });
+      P(wd, r, 12, xlF(`IF(${act},SUMIFS(${PH}!$I$${PS}:$I$${PE},${PH}!$A$${PS}:$A$${PE},A${r},${PH}!$C$${PS}:$C$${PE},D${r}),"")`, x.sp.men), { fill:INPUT, fmt:XL_NUM });
+      P(wd, r, 13, xlF(`IF(${act},SUMIFS(${PH}!$J$${PS}:$J$${PE},${PH}!$A$${PS}:$A$${PE},A${r},${PH}!$C$${PS}:$C$${PE},D${r}),"")`, x.sp.da),  { fill:INPUT, fmt:XL_NUM });
+      P(wd, r, 14, xlF(`IF(${act},SUM(L${r}:M${r}),"")`, x.xuat), { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 15, xlF(`IF(${act},G${r}-L${r},"")`, x.remMen), { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 16, xlF(`IF(${act},J${r}-M${r},"")`, x.remDa),  { fill:CALC, fmt:XL_NUM });
+      P(wd, r, 17, xlF(`IF(${act},K${r}-N${r},"")`, x.tot),    { fill:CALC, fmt:XL_NUM, bold:true });
+      P(wd, r, 18, xlF(`IF(${act},IF(K${r}=0,0,N${r}/K${r}),"")`, pct), { fill:CALC, fmt:"0%", h:"center" });
+      P(wd, r, 19, xlF(`IF(${act},IF(Q${r}<0,"VƯỢT",IF(N${r}=0,"Không xuất hàng","Chưa vượt")),"")`, status), { fill:CALC, h:"center" });
+      P(wd, r, 20, xlF(`IF(${act},IF(COUNTIFS(A$4:A${p},A${r},C$4:C${p},">="&C${r})>0,"⚠ Trùng tháng / sai thứ tự (nhập tháng cũ trước)",IF(COUNTIF(${TH}!$A$${CS}:$A$${CE},A${r})=0,"⚠ Khách chưa có trong sheet Tổng hợp khách hàng","")),"")`, ""), { fill:CALC, color:WARN });
+      P(wd, r, 21, x.notes.join(" · "), { fill:INPUT, wrap:true, color: x.notes.some(n => /^Lệch|^Chưa có/.test(n)) ? WARN : "FF595959" });
+      prevDsm = dsm;
       lastRowOf[c.it.name] = { row: r, vuot, last: x };
       r++;
     });
   }
   const lastD = Math.max(DEND, DS);
-  ["A:C", "P:P", "R:R"].forEach(rg => { const [c1, c2] = rg.split(":"); wd.addConditionalFormatting({ ref:`${c1}${DS}:${c2}${lastD}`, rules:[{ type:"expression", formulae:[`$R${DS}="VƯỢT"`], style:orangeStyle }] }); });
-  wd.addConditionalFormatting({ ref:`R${DS}:R${lastD}`, rules:[{ type:"expression", formulae:[`$R${DS}="Không xuất hàng"`], style:{ font:{ italic:true, color:{ argb:GREY } } } }] });
-  wd.addConditionalFormatting({ ref:`N${DS}:O${lastD}`, rules:[{ type:"cellIs", operator:"lessThan", formulae:["0"], style:{ font:{ color:{ argb:WARN } } } }] });
-  [26,16,10,17,18,20,17,18,20,21,15,15,15,16,16,20,10,16,44,40,14].forEach((w, i) => { wd.getColumn(i + 1).width = w; });
-  wd.getColumn(21).hidden = true;
+  ["A:C", "Q:Q", "S:S"].forEach(rg => { const [c1, c2] = rg.split(":"); wd.addConditionalFormatting({ ref:`${c1}${DS}:${c2}${lastD}`, rules:[{ type:"expression", formulae:[`$S${DS}="VƯỢT"`], style:orangeStyle }] }); });
+  wd.addConditionalFormatting({ ref:`S${DS}:S${lastD}`, rules:[{ type:"expression", formulae:[`$S${DS}="Không xuất hàng"`], style:{ font:{ italic:true, color:{ argb:GREY } } } }] });
+  wd.addConditionalFormatting({ ref:`O${DS}:P${lastD}`, rules:[{ type:"cellIs", operator:"lessThan", formulae:["0"], style:{ font:{ color:{ argb:WARN } } } }] });
+  [26,16,11,11,17,19,20,17,19,20,21,15,15,15,16,16,20,10,16,44,40,16].forEach((w, i) => { wd.getColumn(i + 1).width = w; });
+  wd.getColumn(22).hidden = true;
 
   /* ================= Sheet: Tổng hợp khách hàng ================= */
   const kyLabel = target === "Tất cả" ? "Tất cả các tháng" : "Tháng " + target;
   P(wt, 1, 1, "TỔNG HỢP TIỀN CẤP MẪU DSM THEO KHÁCH HÀNG", { size:15, bold:true, noBorder:true });
-  P(wt, 2, 1, `Báo cáo xuất ngày ${fmtDate(new Date())} · Kỳ: ${kyLabel}${activeRegion !== "Tất cả" ? " · " + activeRegion : ""} · Số liệu định mức (REPORT V2) cập nhật: ${updated || "—"}. Số liệu từng tháng xem sheet 'Theo dõi theo tháng'. Cột xanh lam-lá = MEN · cột đỏ = ĐÁ · cột xám xanh = TỔNG · màu cam = vượt.`, { size:9, italic:true, color:"FF595959", noBorder:true });
+  P(wt, 2, 1, `Báo cáo xuất ngày ${fmtDate(new Date())} · Kỳ: ${kyLabel}${activeRegion !== "Tất cả" ? " · " + activeRegion : ""} · Số liệu định mức (REPORT V2) cập nhật: ${updated || "—"}. DSM tháng 4 áp dụng cho tháng 5. Chi tiết từng tháng xem sheet 'Theo dõi theo tháng'. Cột xanh lam-lá = MEN · cột đỏ = ĐÁ · cột xám xanh = TỔNG · màu cam = vượt.`, { size:9, italic:true, color:"FF595959", noBorder:true });
   const nC = cust.length, sumRem = cust.reduce((s, c) => s + (c.rows.length ? c.rows[c.rows.length - 1].tot : 0), 0);
   const nOver = cust.filter(c => c.rows.length && c.rows[c.rows.length - 1].tot < 0).length;
   P(wt, 3, 1, "Tổng số khách", { bold:true, fill:CALC }); P(wt, 3, 2, xlF(`COUNTIF(A${CS}:A${CE},"?*")`, nC), { bold:true, fill:CALC, h:"center" });
   P(wt, 3, 5, "Khách đang vượt", { bold:true, fill:CALC }); P(wt, 3, 6, xlF(`COUNTIF(K${CS}:K${CE},"VƯỢT")`, nOver), { bold:true, fill:CALC, h:"center" });
   P(wt, 3, 9, "Tổng còn lại (VNĐ)", { bold:true, fill:CALC }); P(wt, 3, 10, xlF(`SUM(J${CS}:J${CE})`, sumRem), { bold:true, fill:CALC, fmt:XL_NUM });
   header(wt, 6,
-    ["Khách hàng","Miền / Khu vực","Tồn MEN ban đầu\n(tháng đầu trong file)","Tồn ĐÁ ban đầu\n(tháng đầu trong file)","Tháng gần nhất\ncó số liệu","Tổng tiền cấp mẫu\ncộng dồn","Tổng đã xuất\ncộng dồn","Còn lại MEN\nhiện tại","Còn lại ĐÁ\nhiện tại","Còn lại hiện tại\n(tổng)","Trạng thái","Số tháng\nđã vượt","Ghi chú"]);
+    ["Khách hàng","Miền / Khu vực","Tồn MEN ban đầu\n(đầu dòng DSM đầu tiên)","Tồn ĐÁ ban đầu\n(đầu dòng DSM đầu tiên)","Tháng DSM gần nhất\n(áp dụng cho tháng sau)","Tổng tiền cấp mẫu\ncộng dồn","Tổng đã xuất\ncộng dồn","Còn lại MEN\nhiện tại","Còn lại ĐÁ\nhiện tại","Còn lại hiện tại\n(tổng)","Trạng thái","Số tháng\nđã vượt","Ghi chú"]);
   const dc = c => `${TD}!$${c}$${DS}:$${c}$${DE}`;
   let sr = CS;
   for(const c of cust){
@@ -1852,19 +1854,19 @@ async function buildDsmXlsx(names){
     P(wt, sr, 2, c.it.c.khuVucChinh || "", { fill:INPUT });
     P(wt, sr, 3, c.open.men, { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
     P(wt, sr, 4, c.open.da,  { fill:INPUT, color:XL_BLUE, fmt:XL_NUM });
-    P(wt, sr, 5, xlF(`IF(A${sr}="","",IF(COUNTIF(${dc("A")},A${sr})=0,"",_xlfn.MAXIFS(${dc("C")},${dc("A")},A${sr})))`, ser(last.mk)), { fill:CALC, fmt:"m/yyyy", h:"center" });
-    P(wt, sr, 6, xlF(`IF(A${sr}="","",N(C${sr})+N(D${sr})+SUMIFS(${dc("E")},${dc("A")},A${sr})+SUMIFS(${dc("H")},${dc("A")},A${sr}))`, c.open.men + c.open.da + totDm), { fill:CALC, fmt:XL_NUM });
-    P(wt, sr, 7, xlF(`IF(A${sr}="","",SUMIFS(${dc("K")},${dc("A")},A${sr})+SUMIFS(${dc("L")},${dc("A")},A${sr}))`, totXuat), { fill:CALC, fmt:XL_NUM });
-    [[8,"N",last.remMen],[9,"O",last.remDa],[10,"P",last.tot]].forEach(([ci, src, val]) =>
+    P(wt, sr, 5, xlF(`IF(A${sr}="","",IF(COUNTIF(${dc("A")},A${sr})=0,"",_xlfn.MAXIFS(${dc("C")},${dc("A")},A${sr})))`, ser(xlPrevMk(last.mk))), { fill:CALC, fmt:"m/yyyy", h:"center" });
+    P(wt, sr, 6, xlF(`IF(A${sr}="","",N(C${sr})+N(D${sr})+SUMIFS(${dc("F")},${dc("A")},A${sr})+SUMIFS(${dc("I")},${dc("A")},A${sr}))`, c.open.men + c.open.da + totDm), { fill:CALC, fmt:XL_NUM });
+    P(wt, sr, 7, xlF(`IF(A${sr}="","",SUMIFS(${dc("L")},${dc("A")},A${sr})+SUMIFS(${dc("M")},${dc("A")},A${sr}))`, totXuat), { fill:CALC, fmt:XL_NUM });
+    [[8,"O",last.remMen],[9,"P",last.remDa],[10,"Q",last.tot]].forEach(([ci, src, val]) =>
       P(wt, sr, ci, xlF(`IF(OR(A${sr}="",E${sr}=""),"",SUMIFS(${dc(src)},${dc("A")},A${sr},${dc("C")},E${sr}))`, val), { fill:CALC, fmt:XL_NUM, bold: ci === 10 }));
     P(wt, sr, 11, xlF(`IF(J${sr}="","",IF(J${sr}<0,"VƯỢT","Chưa vượt"))`, last.tot < 0 ? "VƯỢT" : "Chưa vượt"), { fill:CALC, h:"center" });
-    P(wt, sr, 12, xlF(`IF(A${sr}="","",COUNTIFS(${dc("A")},A${sr},${dc("R")},"VƯỢT"))`, info ? info.vuot : 0), { fill:CALC, h:"center" });
-    const warn = c.rows.flatMap(x => x.notes.filter(n => /^Lệch|^Chưa có|không phân loại/.test(n)).map(n => `${x.mk}: ${n}`));
+    P(wt, sr, 12, xlF(`IF(A${sr}="","",COUNTIFS(${dc("A")},A${sr},${dc("S")},"VƯỢT"))`, info ? info.vuot : 0), { fill:CALC, h:"center" });
+    const warn = c.rows.flatMap(x => x.notes.filter(n => /^Lệch|^Chưa có|không phân loại/.test(n)).map(n => `DSM ${xlPrevMk(x.mk)}: ${n}`));
     P(wt, sr, 13, warn.join(" · "), { fill:INPUT, wrap:true, color:WARN });
     sr++;
   }
   ["A:B", "J:K"].forEach(rg => { const [c1, c2] = rg.split(":"); wt.addConditionalFormatting({ ref:`${c1}${CS}:${c2}${Math.max(sr - 1, CS)}`, rules:[{ type:"expression", formulae:[`$K${CS}="VƯỢT"`], style:orangeStyle }] }); });
-  [28,16,18,18,15,19,19,17,17,19,14,11,40].forEach((w, i) => { wt.getColumn(i + 1).width = w; });
+  [28,16,19,19,18,19,19,17,17,19,14,11,40].forEach((w, i) => { wt.getColumn(i + 1).width = w; });
 
   /* ================= Sheet: Hướng dẫn ================= */
   const lines = [
@@ -1873,15 +1875,19 @@ async function buildDsmXlsx(names){
     ["• Cột XANH LAM-LÁ = MEN.     • Cột ĐỎ = ĐÁ.     • Cột XÁM XANH = TỔNG (MEN + ĐÁ).     • Cột xanh navy = thông tin chung (khách hàng, tháng, trạng thái…).", ""],
     ["• Chữ xanh dương = số lấy từ hệ thống; chữ đen = công thức tự tính.     • Màu CAM = khách / tháng đã vượt tiền cấp mẫu hoặc số âm cần chú ý (không dùng đỏ để khỏi lẫn với cột ĐÁ).", ""],
     ["", ""],
+    ["QUY TẮC THÁNG DSM", "h"],
+    ["• DSM tháng 4 áp dụng cho tháng 5: định mức của dòng DSM tháng 4 dùng để xuất trong tháng 5. Vì vậy mỗi dòng ghi 2 mốc: 'Tháng DSM' (nguồn định mức) và 'Áp dụng cho tháng' (tháng xuất hàng).", ""],
+    ["• Phiếu xuất trong tháng 5 (theo 'Ngày tính DSM') được tính vào dòng DSM tháng 4. Tiền chưa dùng hết chuyển thành tồn đầu kỳ của dòng DSM tháng sau.", ""],
+    ["", ""],
     ["CÁC SHEET", "h"],
     ["• Tổng hợp khách hàng: mỗi khách 1 dòng — tổng tiền cấp mẫu và đã xuất cộng dồn, còn lại MEN / ĐÁ / tổng, trạng thái, số tháng đã vượt.", ""],
-    ["• Theo dõi theo tháng: mỗi dòng là 1 khách trong 1 tháng — tồn đầu kỳ, định mức mới, được phép xuất, đã xuất, còn lại MEN / ĐÁ / tổng, trạng thái.", ""],
+    ["• Theo dõi theo tháng: mỗi dòng là 1 khách trong 1 tháng DSM — tồn đầu kỳ, định mức mới, được phép xuất, đã xuất, còn lại MEN / ĐÁ / tổng, trạng thái.", ""],
     ["• Chi tiết phiếu xuất: từng phiếu xuất (ngày, mã đơn, kho, loại, số tiền); sheet 'Theo dõi theo tháng' cộng từ đây.", ""],
     ["", ""],
     ["QUY TẮC TÍNH", "h"],
     ["• Được phép xuất MEN = Tồn MEN + Định mức MEN (ĐÁ tương tự).   • TỔNG Được phép xuất = MEN + ĐÁ.   • Còn lại MEN = Được phép xuất MEN − Đã xuất MEN (ĐÁ tương tự).   • Còn lại (tổng) = TỔNG Được phép xuất − Tổng đã xuất.", ""],
     ["• Tồn MEN, Tồn ĐÁ của tháng sau = Còn lại MEN, Còn lại ĐÁ của tháng trước. MEN hay ĐÁ riêng lẻ âm thì được bên kia bù (vượt chỉ tính trên TỔNG). Nếu TỔNG còn lại tháng trước âm thì cả hai tồn tháng sau về 0, không bị trừ thêm.", ""],
-    ["• Tháng không xuất hàng vẫn có dòng riêng; tiền cấp mẫu chưa dùng cộng dồn sang tháng sau.", ""],
+    ["• Tháng DSM không có phiếu xuất vẫn có dòng riêng; tiền cấp mẫu chưa dùng cộng dồn sang tháng sau.", ""],
     ["• Dòng tô đỏ = tháng đã xuất vượt tiền cấp mẫu.", ""],
     ["", ""],
     ["LƯU Ý", "h"],
